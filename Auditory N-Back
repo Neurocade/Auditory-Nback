@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Auditory N-Back Task</title>
+<style>
+body {
+font-family: Arial, sans-serif;
+background: #111;
+color: #eee;
+display: flex;
+justify-content: center;
+align-items: center;
+height: 100vh;
+margin: 0;
+}
+#app {
+width: 700px;
+background: #1e1e1e;
+padding: 24px;
+border-radius: 12px;
+box-shadow: 0 0 20px rgba(0,0,0,0.5);
+text-align: center;
+}
+h1, h2 {
+margin-top: 0;
+}
+button {
+padding: 12px 20px;
+margin: 10px;
+font-size: 16px;
+border-radius: 8px;
+border: none;
+cursor: pointer;
+}
+#matchBtn {
+background: #4caf50;
+color: #000;
+}
+#startBtn {
+background: #2196f3;
+color: #000;
+}
+#visualStimulus {
+font-size: 72px;
+margin-top: 20px;
+height: 100px;
+}
+.hidden {
+visibility: hidden;
+}
+#status {
+margin-top: 16px;
+font-size: 18px;
+}
+#results {
+text-align: left;
+margin-top: 20px;
+background: #2a2a2a;
+padding: 16px;
+border-radius: 8px;
+display: none;
+}
+</style>
+</head>
+<body>
+<div id="app">
+<h1>Auditory N-Back Task</h1>
+<div id="menu">
+<p>Select Condition</p>
+<button onclick="startExperiment(1)">Condition 1: Letters</button>
+<button onclick="startExperiment(2)">Condition 2: Sounds</button>
+<button onclick="startExperiment(3)">Condition 3: Letters + Visual Distractor</button>
+<button onclick="startExperiment(4)">Condition 4: Sounds + Visual Distractor</button>
+</div>
+
+
+<div id="task" style="display:none;">
+<h2 id="conditionLabel"></h2>
+<p>N-back level: <span id="nLevel">1</span></p>
+<button id="matchBtn" onclick="registerResponse()">MATCH</button>
+<div id="visualStimulus" class="hidden"></div>
+<div id="status"></div>
+</div>
+
+
+</html>
