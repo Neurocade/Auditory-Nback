@@ -414,17 +414,17 @@ let availableVoices = [];
    - long gap: at least one no-target span of length in [min,max]
    ──────────────────────────────────────────────────────────────────────────── */
 const TARGET_POLICY = {
-  targetRatioByN: { 1: 0.30, 2: 0.30, 3: 0.30 }, // typical baseline
+  targetRatioByN: { 1: 0.30, 2: 0.40, 3: 0.30 }, // typical baseline
   overrideRatio: null,           // e.g., 0.40 → ~12 targets in 30; null = use table above
   windows: 3,                    // split [n..end] into W windows for distribution
   windowTolerance: 1,            // allow ±1 deviation from computed window quota
-  minSinglesRatio: 0.35,         // ≥35% of targets must be singles
+  minSinglesRatio: 0.55,         // ≥55% of targets must be singles
   streakTrialRatio: 0.15,        // ≈15% of *trials* involved in streaks
-  allowLengths: [2,3,4],         // streak lengths allowed
-  maxByLength: { 4: 1, 3: 2 },   // cap: ≤1 four‑in‑a‑row and ≤2 three‑in‑a‑row
-  maxConsecutiveTargets: 4,      // hard cap on streak length in final layout
-  minSpacingBetweenStreaks: 2,   // aim for ≥2 non‑targets between streak groups
-  gapSpanLengthRange: [8, 10]    // at least one long gap (no targets)
+  allowLengths: [2,3],         // streak lengths allowed
+  maxByLength: { 3: 1, 2: 3 },   // cap: ≤1 three‑in‑a‑row and ≤3 two‑in‑a‑row
+  maxConsecutiveTargets: 3,      // hard cap on streak length in final layout
+  minSpacingBetweenStreaks: 6,   // aim for ≥6 non‑targets between streak groups
+  gapSpanLengthRange: [6, 8]    // at least one long gap (no targets)
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
