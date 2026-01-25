@@ -1,87 +1,900 @@
+
+<!--
+File: nback.html
+Purpose: Auditory N‑Back task with 4 conditions (letters/tones ± visual distractor),
+         N‑back & ISI selectors, Instructions page, Voice Settings page (TTS with persistence & test),
+         fixation cross under title, Back buttons, MATCH flash, correct RT/indexing,
+         and ***controlled target scheduling*** (typical ~30% targets, optional override),
+         plus occasional multi‑match streaks and at least one long no‑target span.
+
+───────────────────────────────────────────────────────────────────────────────
+WHAT’S INCLUDED (FEATURE SET)
+───────────────────────────────────────────────────────────────────────────────
+- 4 Conditions:
+  (1) Letters (spoken), (2) Sounds (tones), (3) Letters + visual distractor,
+  (4) Sounds + visual distractor.
+- N‑back selector (1–3).
+- ISI selector (1000–3000 ms).
+- Fixation cross under the title (2× size); hides only during distractors in Cond 3/4’s stimulus window.
+- MATCH button with flash feedback; Space/Enter support (scoped to the button).
+- Back to Menu; safe cleanup of timers and TTS.
+- Instructions page (per‑condition guidance); Back to Home.
+- Voice Settings page (TTS voice/rate/pitch/volume), settings persisted via localStorage, with “Test voice”.
+- ***NEW*** Controlled sequence generator:
+  • Typical target ratio ≈30% (literature‑conform; see below),
+  • Optional override to a fixed ratio (e.g., 12 targets in 30 = 40%),
+  • ~15% of *trials* are part of 2–4‑in‑a‑row target streaks,
+  • ≥ one long gap (8–10 trials) with no targets.
+
+───────────────────────────────────────────────────────────────────────────────
+EVIDENCE & NORMS (Design rationale; references)
+───────────────────────────────────────────────────────────────────────────────
+- Many published N‑back implementations aim for ~30% targets per block (e.g., Inquisit’s
+  single‑response N‑back uses 6 targets among 20 analyzed trials per block; ~3:7 ratio). [1](https://www.millisecond.com/download/library/v7/nback/singlenbacktask_shapes/singlenbacktask_shapes/singlenbacktask_shapes.manual)
+- Typical timing is ~3 s per item in many lab implementations, which aligns with your slower presets. [2](https://www.psytoolkit.org/experiment-library/nback2.html)[3](https://link.springer.com/rwe/10.1007/978-0-387-79948-3_1315)
+
+───────────────────────────────────────────────────────────────────────────────
+DETAILED CHANGELOG (2026‑01‑22)
+───────────────────────────────────────────────────────────────────────────────
+ADDED
+- Controlled target scheduling (buildControlledSequence()):
+  • Default typical target ratio ≈30% (configurable per N), respecting that the first N trials cannot be targets.
+  • Support for **multi‑match streaks**: randomly inserts short runs of 2–4 consecutive target trials;
+    total amount ≈15% of all trials (tunable).
+  • Ensures **≥1 long gap** (8–10 contiguous trials) with zero targets to create variability in challenge.
+  • Works for N=1/2/3 and both modalities (letters/tones).
+
+CHANGED
+- startExperiment(): replaced naive random sequence generation with controlled generator.
+- Added small, well‑commented configuration block (TARGET_POLICY) to tune ratios.
+
+FIXED/CLEANUP
+- Removed stray code from earlier drafts; verified no overlap with TTS/Instructions/Voice Settings pages.
+
+MIGRATION NOTES
+- To force **12 targets in 30**: set `TARGET_POLICY.overrideRatio = 0.40;` (see config block).
+- If you later want fixed **exact** counts rather than ratios, we can parameterize `desiredTargets` directly.
+
+KEY SECTIONS TO KNOW
+- CONFIG: TARGET_POLICY (search for “TARGET_POLICY” below)
+- SEQUENCE ENGINE: buildControlledSequence(), helpers chooseRandom(), chooseFromPoolNot()
+- INTEGRATION: startExperiment() now calls buildControlledSequence() instead of random fill
+- Everything else (TTS, pages, timing, input) stays the same as your last working version
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Auditory N-Back Task</title>
 <style>
+:root {
+    --fixation-size: 144px;      /* 2× bigger cross for better visibility */
+    --fixation-box-height: 180px;/* vertical space reserved under the title */
+    --fixation-shift: 22px;      /* push cross down to visually center between title & UI */
+}
 body {
-font-family: Arial, sans-serif;
-background: #111;
-color: #eee;
-display: flex;
-justify-content: center;
-align-items: center;
-height: 100vh;
-margin: 0;
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: #eee;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
 }
 #app {
-width: 700px;
-background: #1e1e1e;
-padding: 24px;
-border-radius: 12px;
-box-shadow: 0 0 20px rgba(0,0,0,0.5);
-text-align: center;
-}
-h1, h2 {
-margin-top: 0;
+    width: 780px;
+    background: #1e1e1e;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    text-align: center;
 }
 button {
-padding: 12px 20px;
-margin: 10px;
-font-size: 16px;
-border-radius: 8px;
-border: none;
-cursor: pointer;
+    padding: 12px 20px;
+    margin: 10px;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 100ms ease, transform 40ms ease;
 }
-#matchBtn {
-background: #4caf50;
-color: #000;
+#matchBtn { background: #4caf50; color: #000; }
+#matchBtn.flash { background: #7fff7f !important; }
+#backBtn, #homeBtn, .secondaryBtn { background: #9e9e9e; color: #000; }
+
+.controls {
+    display: inline-flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    background: #252525;
+    padding: 10px 12px;
+    border-radius: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
-#startBtn {
-background: #2196f3;
-color: #000;
+label { color: #ddd; font-size: 14px; }
+select {
+    padding: 6px 8px;
+    font-size: 14px;
+    border-radius: 6px;
+    border: 1px solid #444;
+    background: #1b1b1b;
+    color: #eee;
+}
+
+/* Fixation cross under title */
+#topFixationWrap {
+    height: var(--fixation-box-height);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    margin: 6px 0 10px;
+}
+#fixation {
+    font-size: var(--fixation-size);
+    line-height: 1;
+    color: #bbb;
+    margin-top: var(--fixation-shift);
+}
+.hidden { visibility: hidden; }
+
+/* Stimulus-only area (for distractors in Cond 3 & 4) */
+#stimulusArea {
+    margin-top: 16px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
 }
 #visualStimulus {
-font-size: 72px;
-margin-top: 20px;
-height: 100px;
+    font-size: 72px;
+    line-height: 1;
+    visibility: hidden; /* prevents layout jumps when toggling */
 }
-.hidden {
-visibility: hidden;
-}
-#status {
-margin-top: 16px;
-font-size: 18px;
-}
+
+/* Results panel */
 #results {
-text-align: left;
-margin-top: 20px;
-background: #2a2a2a;
-padding: 16px;
-border-radius: 8px;
-display: none;
+    text-align: left;
+    margin-top: 20px;
+    background: #2a2a2a;
+    padding: 16px;
+    border-radius: 8px;
+    display: none;
 }
+
+/* Small helper text */
+.small { color: #aaa; font-size: 12px; margin-top: 8px; }
+
+/* Instructions page */
+#instructions {
+    display: none;
+    text-align: left;
+    background: #222;
+    padding: 16px;
+    border-radius: 10px;
+}
+#instructions h2 { text-align: center; margin-top: 0; }
+.instruct-block {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+/* Voice settings page */
+#voiceSettings {
+    display: none;
+    text-align: left;
+    background: #222;
+    padding: 16px;
+    border-radius: 10px;
+}
+#voiceSettings h2 { text-align: center; margin-top: 0; }
+.setting-group {
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+.setting-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 6px 0;
+}
+.setting-row label { min-width: 64px; }
+.note { color: #bbb; font-size: 13px; margin: 6px 0 0 0; }
+.testBtn { background: #2196f3; color: #000; }
 </style>
 </head>
 <body>
+
 <div id="app">
-<h1>Auditory N-Back Task</h1>
-<div id="menu">
-<p>Select Condition</p>
-<button onclick="startExperiment(1)">Condition 1: Letters</button>
-<button onclick="startExperiment(2)">Condition 2: Sounds</button>
-<button onclick="startExperiment(3)">Condition 3: Letters + Visual Distractor</button>
-<button onclick="startExperiment(4)">Condition 4: Sounds + Visual Distractor</button>
+    <h1>Auditory N-Back Task</h1>
+
+    <!-- Fixation cross (under title) -->
+    <div id="topFixationWrap">
+        <div id="fixation" class="hidden">+</div>
+    </div>
+
+    <!-- MENU (home screen) -->
+    <div id="menu">
+        <div class="controls">
+            <label for="nSelect">N‑back:</label>
+            <select id="nSelect" aria-label="Select N-back level">
+                <option value="1">1‑back</option>
+                <option value="2" selected>2‑back</option>
+                <option value="3">3‑back</option>
+            </select>
+
+            <label for="isiSelect">ISI (ms):</label>
+            <select id="isiSelect" aria-label="Select inter-stimulus interval">
+                <option value="3000">Slow (3000)</option>
+                <option value="2500">Moderate (2500)</option>
+                <option value="2000" selected>Default (2000)</option>
+                <option value="1500">Fast (1500)</option>
+                <option value="1000">Very Fast (1000)</option>
+            </select>
+        </div>
+
+        <p>Select Condition</p>
+        <div>
+            <button type="button" onclick="startExperiment(1)">Condition 1: Letters</button>
+            <button type="button" onclick="startExperiment(2)">Condition 2: Sounds</button>
+        </div>
+        <div>
+            <button type="button" onclick="startExperiment(3)">Letters + Visual Distractor</button>
+            <button type="button" onclick="startExperiment(4)">Sounds + Visual Distractor</button>
+        </div>
+
+        <!-- Buttons for other pages -->
+        <div>
+            <button type="button" class="secondaryBtn" onclick="showInstructions()">Instructions</button>
+            <button type="button" class="secondaryBtn" onclick="showVoiceSettings()">Audio/Voice Settings</button>
+        </div>
+
+        <p class="small">Tip: Space/Enter activates MATCH once the task begins.</p>
+    </div>
+
+    <!-- TASK (run screen) -->
+    <div id="task" style="display:none;">
+        <div style="display:flex; align-items:center; gap:12px; justify-content:flex-start;">
+            <button id="backBtn" type="button" onclick="backToMenu()" aria-label="Back to menu">← Back</button>
+        </div>
+
+        <h2 id="conditionLabel"></h2>
+        <p>
+            N‑back level: <span id="nLevel">2</span>
+            &nbsp;|&nbsp; ISI: <span id="isiLabel">2000</span> ms
+        </p>
+
+        <button id="matchBtn" type="button" aria-label="Match (press Space or Enter)">MATCH</button>
+
+        <div id="stimulusArea">
+            <div id="visualStimulus"></div>
+        </div>
+
+        <div id="status"></div>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="results"></div>
+
+    <!-- INSTRUCTIONS PAGE -->
+    <div id="instructions">
+        <h2>Instructions</h2>
+
+        <div class="instruct-block">
+            <h3>General (N‑Back Rule)</h3>
+            <ul>
+                <li>You will hear a sequence of items (letters or tones), one at a time.</li>
+                <li>Press <b>MATCH</b> if the current item is the same as the one from <b>N steps back</b>.</li>
+                <li>Example (2‑back): If the current item matches the one two items ago, press <b>MATCH</b>.</li>
+                <li>Respond during the current item’s window; late presses don’t count for the prior trial.</li>
+                <li>Change difficulty (N‑back) and speed (ISI) on the home screen.</li>
+            </ul>
+        </div>
+
+        <div class="instruct-block">
+            <h3>Condition 1: Letters</h3>
+            <ul>
+                <li>You will hear <b>spoken letters</b> (A–Z).</li>
+                <li>Press <b>MATCH</b> if the letter matches the letter from N items ago.</li>
+                <li>Tip: If letters are hard to hear, adjust the <b>Audio/Voice Settings</b> on the home screen.</li>
+            </ul>
+        </div>
+
+        <div class="instruct-block">
+            <h3>Condition 2: Sounds</h3>
+            <ul>
+                <li>You will hear <b>tones</b> (different pitches).</li>
+                <li>Press <b>MATCH</b> if the current tone matches the tone from N items ago.</li>
+            </ul>
+        </div>
+
+        <div class="instruct-block">
+            <h3>Condition 3: Letters + Visual Distractor</h3>
+            <ul>
+                <li>You will hear <b>spoken letters</b> as in Condition 1.</li>
+                <li>During each item, a <b>visual symbol</b> briefly appears below the fixation cross.</li>
+                <li><b>Ignore</b> the symbol; it’s a distractor. Focus on the letters and the N‑back rule.</li>
+            </ul>
+        </div>
+
+        <div class="instruct-block">
+            <h3>Condition 4: Sounds + Visual Distractor</h3>
+            <ul>
+                <li>You will hear <b>tones</b> as in Condition 2.</li>
+                <li>During each item, a <b>visual symbol</b> briefly appears below the fixation cross.</li>
+                <li><b>Ignore</b> the symbol; it’s a distractor. Focus on the tones and the N‑back rule.</li>
+            </ul>
+        </div>
+
+        <div style="text-align:center; margin-top: 12px;">
+            <button id="homeBtn" type="button" onclick="backToHomeFromInstructions()">← Back to Home</button>
+        </div>
+    </div>
+
+    <!-- VOICE SETTINGS PAGE -->
+    <div id="voiceSettings">
+        <h2>Audio/Voice Settings</h2>
+
+        <div class="setting-group">
+            <h3>What these settings do</h3>
+            <ul>
+                <li><b>Voice</b>: The speaker used for letters. Pick a natural, clear voice.</li>
+                <li><b>Rate</b>: Speaking speed. Slightly slower (e.g., 0.9) improves single‑letter clarity.</li>
+                <li><b>Pitch</b>: High/low quality of the voice. Near 1.0 is most natural; slightly lower can help clarity.</li>
+                <li><b>Volume</b>: Loudness (1.0 is full volume).</li>
+            </ul>
+            <p class="note">Tip: After changing settings, press <b>Test voice (Sample audio)</b> to hear the result.</p>
+        </div>
+
+        <div class="setting-group">
+            <div class="setting-row">
+                <label for="voiceSelect">Voice:</label>
+                <select id="voiceSelect" aria-label="Select TTS voice">
+                    <option value="">Auto (best available)</option>
+                </select>
+            </div>
+
+            <div class="setting-row">
+                <label for="ttsRate">Rate:</label>
+                <select id="ttsRate" aria-label="TTS rate">
+                    <option value="0.8">0.8</option>
+                    <option value="0.9" selected>0.9</option>
+                    <option value="1.0">1.0</option>
+                    <option value="1.1">1.1</option>
+                </select>
+            </div>
+
+            <div class="setting-row">
+                <label for="ttsPitch">Pitch:</label>
+                <select id="ttsPitch" aria-label="TTS pitch">
+                    <option value="0.9">0.9</option>
+                    <option value="1.0" selected>1.0</option>
+                    <option value="1.1">1.1</option>
+                </select>
+            </div>
+
+            <div class="setting-row">
+                <label for="ttsVol">Volume:</label>
+                <select id="ttsVol" aria-label="TTS volume">
+                    <option value="0.8">0.8</option>
+                    <option value="1.0" selected>1.0</option>
+                </select>
+            </div>
+
+            <div class="setting-row" style="justify-content:center;">
+                <button type="button" class="testBtn" onclick="testTtsSample()">Test voice (Sample audio)</button>
+            </div>
+        </div>
+
+        <div style="text-align:center; margin-top: 12px;">
+            <button type="button" class="secondaryBtn" onclick="backToHomeFromVoice()">← Back to Home</button>
+        </div>
+    </div>
 </div>
 
+<script>
+/* ────────────────────────────────────────────────────────────────────────────
+   GLOBALS & CONSTANTS (core behavior retained from your last version)
+   ──────────────────────────────────────────────────────────────────────────── */
+let condition = 1, n = 2, sequence = [], index = 0, trialActive = false;
+let results = [];
+let trialStartTime = null;
+let isi = 2000, trials = 30;
+const stimDur = 600; // ms the distractor replaces fixation in Cond 3/4
 
-<div id="task" style="display:none;">
-<h2 id="conditionLabel"></h2>
-<p>N-back level: <span id="nLevel">1</span></p>
-<button id="matchBtn" onclick="registerResponse()">MATCH</button>
-<div id="visualStimulus" class="hidden"></div>
-<div id="status"></div>
-</div>
+let runActive = false, trialTimeoutId = null, distractorTimeoutId = null;
 
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const TONES = [300, 450, 600, 750, 900];
+const DISTRACTORS = ["▲", "■", "●", "★", "☀", "☂", "◆"];
 
+const matchBtn = document.getElementById("matchBtn");
+const nSelect = document.getElementById("nSelect");
+const isiSelect = document.getElementById("isiSelect");
+const visualBox = document.getElementById("visualStimulus");
+const fixation = document.getElementById("fixation");
+
+// Page containers for navigation
+const menuEl = document.getElementById("menu");
+const taskEl = document.getElementById("task");
+const resultsEl = document.getElementById("results");
+const instructionsEl = document.getElementById("instructions");
+const voiceSettingsEl = document.getElementById("voiceSettings");
+
+// TTS controls & state
+const voiceSelect = document.getElementById('voiceSelect');
+const ttsRateSel  = document.getElementById('ttsRate');
+const ttsPitchSel = document.getElementById('ttsPitch');
+const ttsVolSel   = document.getElementById('ttsVol');
+let availableVoices = [];
+
+/* ────────────────────────────────────────────────────────────────────────────
+   NEW: CONTROLLED TARGET POLICY (tune here if you want different behavior)
+   - targetRatioByN: typical ~30% (can tweak per N level)
+   - overrideRatio: set to a number (e.g., 0.40) to force 12 targets in 30
+   - streakTrialRatio: approx fraction of *trials* that are part of 2–4‑in‑a‑row target streaks
+   - gapSpanLengthRange: inclusive range for a long no‑target span; at least one is placed
+   ──────────────────────────────────────────────────────────────────────────── */
+const TARGET_POLICY = {
+    targetRatioByN: { 1: 0.30, 2: 0.30, 3: 0.30 }, // literature‑typical default (~30%) for analyzed trials [1](https://www.millisecond.com/download/library/v7/nback/singlenbacktask_shapes/singlenbacktask_shapes/singlenbacktask_shapes.manual)
+    overrideRatio: null, // e.g., 0.40 for 12/30; set to null to use typical defaults above
+    streakTrialRatio: 0.15,  // ≈15% of total trials are in 2–4‑in‑a‑row target streaks
+    gapSpanLengthRange: [8, 10] // place at least one long no‑target span of this length
+};
+
+/* ────────────────────────────────────────────────────────────────────────────
+   NAVIGATION HELPERS (unchanged)
+   ──────────────────────────────────────────────────────────────────────────── */
+function hideAllPages() {
+    menuEl.style.display = "none";
+    taskEl.style.display = "none";
+    resultsEl.style.display = "none";
+    instructionsEl.style.display = "none";
+    voiceSettingsEl.style.display = "none";
+}
+function showInstructions() {
+    hideAllPages();
+    fixation.classList.add("hidden");
+    instructionsEl.style.display = "block";
+}
+function backToHomeFromInstructions() {
+    hideAllPages();
+    menuEl.style.display = "block";
+    fixation.classList.add("hidden");
+}
+function showVoiceSettings() {
+    hideAllPages();
+    fixation.classList.add("hidden");
+    if (!availableVoices.length) populateVoices();
+    voiceSettingsEl.style.display = "block";
+}
+function backToHomeFromVoice() {
+    hideAllPages();
+    menuEl.style.display = "block";
+    fixation.classList.add("hidden");
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   PERSISTENCE (localStorage) for TTS settings
+   ──────────────────────────────────────────────────────────────────────────── */
+const TTS_STORAGE_KEY = 'ttsSettings_v1';
+function saveTtsSettings() {
+    try {
+        const data = {
+            voiceName: voiceSelect.value || '',
+            rate: String(ttsRateSel.value || ''),
+            pitch: String(ttsPitchSel.value || ''),
+            volume: String(ttsVolSel.value || '')
+        };
+        localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(data));
+    } catch (e) { console.warn('Could not save TTS settings:', e); }
+}
+function loadTtsSettings() {
+    try {
+        const raw = localStorage.getItem(TTS_STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+            if (data.rate)  ttsRateSel.value  = String(data.rate);
+            if (data.pitch) ttsPitchSel.value = String(data.pitch);
+            if (data.volume)ttsVolSel.value   = String(data.volume);
+            if (typeof data.voiceName === 'string') voiceSelect.dataset.desiredVoice = data.voiceName;
+        }
+    } catch (e) { console.warn('Could not load TTS settings:', e); }
+}
+loadTtsSettings();
+[voiceSelect, ttsRateSel, ttsPitchSel, ttsVolSel].forEach(el => el.addEventListener('change', saveTtsSettings));
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TTS VOICES (unchanged core; honors saved preference)
+   ──────────────────────────────────────────────────────────────────────────── */
+function populateVoices() {
+    availableVoices = window.speechSynthesis.getVoices() || [];
+    voiceSelect.innerHTML = '<option value="">Auto (best available)</option>';
+    availableVoices.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = `${v.name} — ${v.lang}`;
+        voiceSelect.appendChild(opt);
+    });
+    const desired = voiceSelect.dataset.desiredVoice;
+    if (desired) {
+        const foundDesired = availableVoices.find(v => v.name === desired);
+        if (foundDesired) { voiceSelect.value = foundDesired.name; delete voiceSelect.dataset.desiredVoice; return; }
+    }
+    const preferredNames = [
+        'Microsoft Aria Online (Natural) - English (United States)',
+        'Microsoft Jenny Online (Natural) - English (United States)',
+        'Microsoft Guy Online (Natural) - English (United States)',
+        'Microsoft Samantha Online (Natural) - English (United States)',
+        'Samantha','Ava','Alex',
+        'Google US English','Google UK English Female','Google UK English Male'
+    ];
+    for (const name of preferredNames) {
+        const found = availableVoices.find(v => v.name === name);
+        if (found) { voiceSelect.value = found.name; return; }
+    }
+    if (!voiceSelect.value) {
+        const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en'));
+        if (en) voiceSelect.value = en.name;
+    }
+}
+window.speechSynthesis.onvoiceschanged = populateVoices;
+populateVoices();
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TTS SAMPLE TEST (on Voice Settings page)
+   ──────────────────────────────────────────────────────────────────────────── */
+function testTtsSample() {
+    const utter = new SpeechSynthesisUtterance('Sample audio');
+    const rate  = parseFloat(ttsRateSel.value || '0.9');
+    const pitch = parseFloat(ttsPitchSel.value || '1.0');
+    const vol   = parseFloat(ttsVolSel.value   || '1.0');
+    utter.rate   = isNaN(rate)  ? 0.9 : rate;
+    utter.pitch  = isNaN(pitch) ? 1.0 : pitch;
+    utter.volume = isNaN(vol)   ? 1.0 : vol;
+    const chosen = availableVoices.find(v => v.name === voiceSelect.value);
+    if (chosen) { utter.voice = chosen; if (chosen.lang) utter.lang = chosen.lang; }
+    else { const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en')); if (en) { utter.voice = en; if (en.lang) utter.lang = en.lang; } }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   MATCH BUTTON FEEDBACK & KEYBOARD (scoped)
+   ──────────────────────────────────────────────────────────────────────────── */
+function flashMatchButton() {
+    matchBtn.classList.add("flash");
+    setTimeout(() => matchBtn.classList.remove("flash"), 120);
+}
+matchBtn.addEventListener("click", () => { flashMatchButton(); registerResponse(); });
+matchBtn.addEventListener("keydown", (e) => {
+    if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flashMatchButton(); registerResponse(); }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+   START EXPERIMENT
+   - Replaces naive random sequence with a ***controlled*** sequence:
+     buildControlledSequence(trials, n, pool, TARGET_POLICY)
+   ──────────────────────────────────────────────────────────────────────────── */
+function startExperiment(cond) {
+    if (!availableVoices.length) { populateVoices(); setTimeout(()=>{},0); }
+
+    n = parseInt(nSelect.value, 10); if (isNaN(n) || n < 1) n = 1;
+    isi = parseInt(isiSelect.value, 10); if (isNaN(isi) || isi < 500) isi = 500;
+
+    document.getElementById("nLevel").textContent = n;
+    document.getElementById("isiLabel").textContent = isi;
+
+    condition = cond;
+    hideAllPages();
+    taskEl.style.display = "block";
+
+    document.getElementById("conditionLabel").textContent =
+        "Condition " + cond + (cond <= 2 ? "" : " (with visual distractor)");
+
+    trials = 30; // you can change this if you want longer blocks
+
+    // Choose the appropriate stimulus pool by condition
+    const pool = (condition === 1 || condition === 3) ? LETTERS : TONES;
+
+    // *** Controlled sequence generation ***
+    sequence = buildControlledSequence(trials, n, pool, TARGET_POLICY);
+
+    // Reset run state
+    index = 0;
+    results = [];
+    runActive = true;
+    trialActive = false;
+    clearTimeout(trialTimeoutId);
+    clearTimeout(distractorTimeoutId);
+    window.speechSynthesis.cancel();
+
+    // Show fixation under title; ensure distractor hidden initially
+    fixation.classList.remove("hidden");
+    visualBox.style.visibility = "hidden";
+    visualBox.textContent = "";
+
+    nextTrial();
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   AUDIO HELPERS (unchanged)
+   ──────────────────────────────────────────────────────────────────────────── */
+function playTone(freq) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
+    gain.gain.linearRampToValueAtTime(0.22, now + 0.35);
+    gain.gain.linearRampToValueAtTime(0, now + 0.4);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + 0.42);
+}
+function speakLetter(letter) {
+    const utter = new SpeechSynthesisUtterance(letter);
+    const rate  = parseFloat(ttsRateSel.value || '0.9');
+    const pitch = parseFloat(ttsPitchSel.value || '1.0');
+    const vol   = parseFloat(ttsVolSel.value   || '1.0');
+    utter.rate   = isNaN(rate)  ? 0.9 : rate;
+    utter.pitch  = isNaN(pitch) ? 1.0 : pitch;
+    utter.volume = isNaN(vol)   ? 1.0 : vol;
+    const chosen = availableVoices.find(v => v.name === voiceSelect.value);
+    if (chosen) { utter.voice = chosen; if (chosen.lang) utter.lang = chosen.lang; }
+    else { const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en')); if (en) { utter.voice = en; if (en.lang) utter.lang = en.lang; } }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   BACK TO MENU (during a run)
+   ──────────────────────────────────────────────────────────────────────────── */
+function backToMenu() {
+    runActive = false; trialActive = false;
+    clearTimeout(trialTimeoutId); clearTimeout(distractorTimeoutId);
+    window.speechSynthesis.cancel();
+
+    hideAllPages();
+    menuEl.style.display = "block";
+
+    fixation.classList.add("hidden");
+    visualBox.style.visibility = "hidden";
+    visualBox.textContent = "";
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   TRIAL LOOP & INPUT (unchanged, now using the controlled sequence)
+   ──────────────────────────────────────────────────────────────────────────── */
+function nextTrial() {
+    if (!runActive) return;
+    if (index >= sequence.length) { endExperiment(); return; }
+
+    trialActive = true;
+    const stim = sequence[index];
+
+    // Visual handling for distractors (3/4): hide fixation briefly and show symbol
+    if (condition === 3 || condition === 4) {
+        fixation.classList.add("hidden");
+        visualBox.textContent = DISTRACTORS[Math.floor(Math.random() * DISTRACTORS.length)];
+        visualBox.style.visibility = "visible";
+        clearTimeout(distractorTimeoutId);
+        distractorTimeoutId = setTimeout(() => {
+            visualBox.style.visibility = "hidden";
+            visualBox.textContent = "";
+            fixation.classList.remove("hidden");
+        }, stimDur);
+    } else {
+        fixation.classList.remove("hidden");
+        visualBox.style.visibility = "hidden";
+        visualBox.textContent = "";
+    }
+
+    // Present auditory stimulus
+    if (condition === 1 || condition === 3) speakLetter(stim);
+    else playTone(stim);
+
+    // Record trial state
+    const isTarget = (index >= n && stim === sequence[index - n]);
+    results.push({ stimulus: stim, target: isTarget, responded: false, rt: null });
+
+    // Start RT timer
+    trialStartTime = performance.now();
+
+    // Advance after ISI
+    clearTimeout(trialTimeoutId);
+    trialTimeoutId = setTimeout(() => {
+        if (!runActive) return;
+        index++;
+        trialActive = false;
+        nextTrial();
+    }, isi);
+}
+function registerResponse() {
+    if (!trialActive || !runActive) return;
+    if (index < 0 || index >= results.length) return;
+    const r = results[index];
+    if (!r || r.responded) return;
+    r.responded = true;
+    r.rt = performance.now() - (trialStartTime ?? performance.now());
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   END EXPERIMENT (unchanged)
+   ──────────────────────────────────────────────────────────────────────────── */
+function endExperiment() {
+    if (!runActive) return;
+    runActive = false;
+
+    hideAllPages();
+    resultsEl.style.display = "block";
+
+    let hits = 0, misses = 0, falseAlarms = 0;
+    results.forEach(r => {
+        if (r.target && r.responded) hits++;
+        if (r.target && !r.responded) misses++;
+        if (!r.target && r.responded) falseAlarms++;
+    });
+    const rts = results.filter(r => r.responded && typeof r.rt === "number").map(r => r.rt);
+    const meanRT = rts.length ? Math.round(rts.reduce((a,b)=>a+b,0)/rts.length) : "—";
+
+    resultsEl.innerHTML = `
+        <h3>Results</h3>
+        <p><b>N‑back:</b> ${n}</p>
+        <p><b>ISI:</b> ${isi} ms</p>
+        <p><b>Trials:</b> ${sequence.length}</p>
+        <p><b>Hits:</b> ${hits}</p>
+        <p><b>Misses:</b> ${misses}</p>
+        <p><b>False Alarms:</b> ${falseAlarms}</p>
+        <p><b>Mean Reaction Time:</b> ${meanRT} ms</p>
+        <button onclick="location.reload()">Restart</button>
+        <button onclick="backToMenu()">Back to Menu</button>
+    `;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   *** CONTROLLED SEQUENCE ENGINE ***
+   - Builds a length=`trials` sequence from `pool` (letters or tones) for N-back.
+   - Enforces:
+     • desired target ratio (typical ~30% or override),
+     • ≥1 long no‑target span (8–10),
+     • some multi‑match streaks (2–4 in a row) covering ~15% of trials.
+   - Strategy:
+     1) Decide target positions among indices [n .. trials-1] (first N cannot be targets).
+     2) Carve a long gap segment with no targets.
+     3) Insert a few streak groups (2–4 consecutive target indices), avoiding the gap.
+     4) Fill remaining targets as singletons.
+     5) Generate actual symbols left→right:
+        - If i is a target: x[i] = x[i‑N]
+        - Else: x[i] ≠ x[i‑N] (to avoid accidental targets)
+        - Early items (i < N): pick freely.
+   ──────────────────────────────────────────────────────────────────────────── */
+function buildControlledSequence(trials, n, pool, policy) {
+    // 0) helpers
+    const randInt = (a,b) => Math.floor(Math.random()*(b-a+1))+a; // inclusive
+    const shuffle = (arr) => arr.sort(() => Math.random()-0.5);
+    const chooseRandom = (arr) => arr[Math.floor(Math.random()*arr.length)];
+    const chooseFromPoolNot = (pool, forbidden) => {
+        // Return any item from pool not in the forbidden Set (or !== single value)
+        if (forbidden instanceof Set) {
+            const candidates = pool.filter(x => !forbidden.has(x));
+            return chooseRandom(candidates.length ? candidates : pool);
+        } else {
+            return chooseRandom(pool.filter(x => x !== forbidden).length ? pool.filter(x => x !== forbidden) : pool);
+        }
+    };
+
+    // 1) figure desired target count over valid positions [n..trials-1]
+    const validCount = Math.max(0, trials - n);
+    const baseRatio = (policy.overrideRatio != null) ? policy.overrideRatio
+                    : (policy.targetRatioByN[n] ?? 0.30);
+    // Targets are decided over *total trials* for simplicity and user intuition,
+    // but we must ensure they fit in valid slots [n..]: cap accordingly.
+    let desiredTargets = Math.round(baseRatio * trials);
+    desiredTargets = Math.min(desiredTargets, validCount);
+
+    // Edge case: if desiredTargets is very small, ensure at least 1 target (for non‑0 N)
+    if (desiredTargets === 0 && validCount > 0) desiredTargets = 1;
+
+    // 2) prepare candidate index list where targets are allowed
+    const candidates = [];
+    for (let i = n; i < trials; i++) candidates.push(i);
+
+    // 3) carve at least one long no‑target span (8–10 by default)
+    const [gapMin, gapMax] = policy.gapSpanLengthRange || [8,10];
+    const gapLen = Math.min(randInt(gapMin, gapMax), validCount);
+    // Choose a start so that the gap fully lies within [n..trials-1]
+    const gapStart = (validCount > gapLen) ? (n + randInt(0, validCount - gapLen)) : n;
+    const gapIndices = new Set();
+    for (let i = gapStart; i < gapStart + gapLen; i++) gapIndices.add(i);
+
+    // Remove gap indices from candidate pool
+    const free = candidates.filter(i => !gapIndices.has(i));
+
+    // 4) plan multi‑match streaks: total target *trials* in streaks ≈ streakTrialRatio * trials
+    let streakTargetBudget = Math.min(desiredTargets - 1, Math.max(0, Math.round((policy.streakTrialRatio || 0.15) * trials)));
+    const streakGroups = [];
+    // Greedy assemble 2–4 length groups until budget is exhausted (or cannot place more)
+    while (streakTargetBudget >= 2) {
+        const len = Math.min(randInt(2,4), streakTargetBudget);
+        streakGroups.push(len);
+        streakTargetBudget -= len;
+    }
+
+    // 5) place streak groups into the free index space, avoiding overlaps and the gap
+    const taken = new Set(); // will collect all chosen target indices
+    const freeSorted = [...free].sort((a,b)=>a-b);
+
+    function canPlaceStreak(start, len) {
+        for (let k=0;k<len;k++) {
+            const idx = start + k;
+            if (!freeSorted.includes(idx)) return false; // must be in free list
+            if (taken.has(idx)) return false;            // not already taken
+            // Also avoid running off the end
+            if (idx >= trials) return false;
+        }
+        return true;
+    }
+
+    // try random placements for each streak group with limited attempts
+    for (const len of streakGroups) {
+        let placed = false;
+        for (let attempt = 0; attempt < 60; attempt++) {
+            // start must be in free & allow len consecutive
+            const candidateStarts = freeSorted.filter(i => i+len-1 < trials);
+            const start = chooseRandom(candidateStarts);
+            if (start == null) break;
+            if (canPlaceStreak(start, len)) {
+                for (let k=0;k<len;k++) taken.add(start+k);
+                placed = true;
+                break;
+            }
+        }
+        // if not placed, skip this streak silently
+    }
+
+    // 6) fill remaining targets as singletons from remaining free slots
+    const remainingNeeded = Math.max(0, desiredTargets - taken.size);
+    const singlesPool = freeSorted.filter(i => !taken.has(i));
+    shuffle(singlesPool);
+    for (let i=0; i<remainingNeeded && i<singlesPool.length; i++) taken.add(singlesPool[i]);
+
+    // 7) create the actual stimulus sequence honoring target/non‑target logic
+    const seq = new Array(trials).fill(null);
+
+    // First N items: free picks (these cannot be targets by definition)
+    for (let i = 0; i < Math.min(n, trials); i++) {
+        seq[i] = chooseRandom(pool);
+    }
+
+    // Remaining items
+    for (let i = n; i < trials; i++) {
+        const isTargetPos = taken.has(i); // we planned this index as a target
+        if (isTargetPos) {
+            // Force this to match the item N back
+            seq[i] = seq[i - n];
+        } else {
+            // Must NOT equal the item N back (to avoid accidental target)
+            const forbidden = seq[i - n];
+            seq[i] = chooseFromPoolNot(pool, forbidden);
+        }
+    }
+
+    return seq;
+}
+</script>
+</body>
 </html>
