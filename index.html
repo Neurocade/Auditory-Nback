@@ -17,13 +17,13 @@ WHAT’S INCLUDED
 - Instructions page (per‑condition guidance); Back to Home.
 - Voice Settings page (TTS voice/rate/pitch/volume), settings persisted via localStorage, with “Test voice”.
 - ***NEW*** Controlled sequence generator:
-  • Typical target ratio ≈30% (literature‑typical), overrideable (e.g., 40% ≈ 12/30),
+  • Typical target ratio ≈30% (literature‑typical), overrideable (e.g., 30% ≈ 12/40),
   • ~15% of *trials* involved in 2–4‑in‑a‑row streaks (bounded, spaced, and capped),
   • ≥1 long no‑target span (8–10) per block,
   • Per‑window quotas to distribute targets more evenly across the block.
 
 NOTES
-- To force ~12 matches in 30: set TARGET_POLICY.overrideRatio = 0.40.
+- To force ~12 matches in 40: set TARGET_POLICY.overrideRatio = 0.30.
 - If constraints are tight on a random draw, the generator relaxes soft constraints (spacing/tolerance) before touching streak caps.
 
 -->
@@ -202,7 +202,7 @@ select {
 
             <label for="isiSelect">ISI (ms):</label>
             <select id="isiSelect" aria-label="Select inter-stimulus interval">
-                <option value="3000">Slow (3000)</option>
+                <option value="00">Slow (00)</option>
                 <option value="2500">Moderate (2500)</option>
                 <option value="2000" selected>Default (2000)</option>
                 <option value="1500">Fast (1500)</option>
@@ -376,7 +376,7 @@ select {
 let condition = 1, n = 2, sequence = [], index = 0, trialActive = false;
 let results = [];
 let trialStartTime = null;
-let isi = 2000, trials = 30;
+let isi = 2000, trials = 40;
 const stimDur = 600; // visual distractor duration in ms (conditions 3 & 4)
 
 let runActive = false, trialTimeoutId = null, distractorTimeoutId = null;
@@ -577,7 +577,7 @@ function startExperiment(cond) {
     document.getElementById("conditionLabel").textContent =
         "Condition " + cond + (cond <= 2 ? "" : " (with visual distractor)");
 
-    trials = 30; // change if you want longer blocks
+    trials = 40; // change if you want longer blocks
 
     const pool = (condition === 1 || condition === 3) ? LETTERS : TONES;
 
