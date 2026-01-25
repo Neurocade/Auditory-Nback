@@ -4,15 +4,11 @@ File: nback.html
 Purpose: Auditory N‑Back task with 4 conditions (letters/tones ± visual distractor),
          N‑back & ISI selectors, Instructions page, Voice Settings page (TTS with persistence & test),
          fixation cross under title, Back buttons, MATCH flash, correct RT/indexing,
-         and ***controlled target scheduling*** (typical ~30% targets, optional override),
-         plus occasional multi‑match streaks and at least one long no‑target span.
+         and ***controlled target scheduling*** with evenness guardrails.
 
-───────────────────────────────────────────────────────────────────────────────
-WHAT’S INCLUDED (FEATURE SET)
-───────────────────────────────────────────────────────────────────────────────
+WHAT’S INCLUDED
 - 4 Conditions:
-  (1) Letters (spoken), (2) Sounds (tones), (3) Letters + visual distractor,
-  (4) Sounds + visual distractor.
+  (1) Letters (spoken), (2) Sounds (tones), (3) Letters + visual distractor, (4) Sounds + visual distractor.
 - N‑back selector (1–3).
 - ISI selector (1000–3000 ms).
 - Fixation cross under the title (2× size); hides only during distractors in Cond 3/4’s stimulus window.
@@ -21,45 +17,15 @@ WHAT’S INCLUDED (FEATURE SET)
 - Instructions page (per‑condition guidance); Back to Home.
 - Voice Settings page (TTS voice/rate/pitch/volume), settings persisted via localStorage, with “Test voice”.
 - ***NEW*** Controlled sequence generator:
-  • Typical target ratio ≈30% (literature‑conform; see below),
-  • Optional override to a fixed ratio (e.g., 12 targets in 30 = 40%),
-  • ~15% of *trials* are part of 2–4‑in‑a‑row target streaks,
-  • ≥ one long gap (8–10 trials) with no targets.
+  • Typical target ratio ≈30% (literature‑typical), overrideable (e.g., 40% ≈ 12/30),
+  • ~15% of *trials* involved in 2–4‑in‑a‑row streaks (bounded, spaced, and capped),
+  • ≥1 long no‑target span (8–10) per block,
+  • Per‑window quotas to distribute targets more evenly across the block.
 
-───────────────────────────────────────────────────────────────────────────────
-EVIDENCE & NORMS (Design rationale; references)
-───────────────────────────────────────────────────────────────────────────────
-- Many published N‑back implementations aim for ~30% targets per block (e.g., Inquisit’s
-  single‑response N‑back uses 6 targets among 20 analyzed trials per block; ~3:7 ratio). [1](https://www.millisecond.com/download/library/v7/nback/singlenbacktask_shapes/singlenbacktask_shapes/singlenbacktask_shapes.manual)
-- Typical timing is ~3 s per item in many lab implementations, which aligns with your slower presets. [2](https://www.psytoolkit.org/experiment-library/nback2.html)[3](https://link.springer.com/rwe/10.1007/978-0-387-79948-3_1315)
+NOTES
+- To force ~12 matches in 30: set TARGET_POLICY.overrideRatio = 0.40.
+- If constraints are tight on a random draw, the generator relaxes soft constraints (spacing/tolerance) before touching streak caps.
 
-───────────────────────────────────────────────────────────────────────────────
-DETAILED CHANGELOG (2026‑01‑22)
-───────────────────────────────────────────────────────────────────────────────
-ADDED
-- Controlled target scheduling (buildControlledSequence()):
-  • Default typical target ratio ≈30% (configurable per N), respecting that the first N trials cannot be targets.
-  • Support for **multi‑match streaks**: randomly inserts short runs of 2–4 consecutive target trials;
-    total amount ≈15% of all trials (tunable).
-  • Ensures **≥1 long gap** (8–10 contiguous trials) with zero targets to create variability in challenge.
-  • Works for N=1/2/3 and both modalities (letters/tones).
-
-CHANGED
-- startExperiment(): replaced naive random sequence generation with controlled generator.
-- Added small, well‑commented configuration block (TARGET_POLICY) to tune ratios.
-
-FIXED/CLEANUP
-- Removed stray code from earlier drafts; verified no overlap with TTS/Instructions/Voice Settings pages.
-
-MIGRATION NOTES
-- To force **12 targets in 30**: set `TARGET_POLICY.overrideRatio = 0.40;` (see config block).
-- If you later want fixed **exact** counts rather than ratios, we can parameterize `desiredTargets` directly.
-
-KEY SECTIONS TO KNOW
-- CONFIG: TARGET_POLICY (search for “TARGET_POLICY” below)
-- SEQUENCE ENGINE: buildControlledSequence(), helpers chooseRandom(), chooseFromPoolNot()
-- INTEGRATION: startExperiment() now calls buildControlledSequence() instead of random fill
-- Everything else (TTS, pages, timing, input) stays the same as your last working version
 -->
 
 <!DOCTYPE html>
@@ -405,13 +371,13 @@ select {
 
 <script>
 /* ────────────────────────────────────────────────────────────────────────────
-   GLOBALS & CONSTANTS (core behavior retained from your last version)
+   GLOBALS & CONSTANTS (core behavior)
    ──────────────────────────────────────────────────────────────────────────── */
 let condition = 1, n = 2, sequence = [], index = 0, trialActive = false;
 let results = [];
 let trialStartTime = null;
 let isi = 2000, trials = 30;
-const stimDur = 600; // ms the distractor replaces fixation in Cond 3/4
+const stimDur = 600; // visual distractor duration in ms (conditions 3 & 4)
 
 let runActive = false, trialTimeoutId = null, distractorTimeoutId = null;
 
@@ -426,7 +392,7 @@ const isiSelect = document.getElementById("isiSelect");
 const visualBox = document.getElementById("visualStimulus");
 const fixation = document.getElementById("fixation");
 
-// Page containers for navigation
+// Pages
 const menuEl = document.getElementById("menu");
 const taskEl = document.getElementById("task");
 const resultsEl = document.getElementById("results");
@@ -441,21 +407,28 @@ const ttsVolSel   = document.getElementById('ttsVol');
 let availableVoices = [];
 
 /* ────────────────────────────────────────────────────────────────────────────
-   NEW: CONTROLLED TARGET POLICY (tune here if you want different behavior)
-   - targetRatioByN: typical ~30% (can tweak per N level)
-   - overrideRatio: set to a number (e.g., 0.40) to force 12 targets in 30
-   - streakTrialRatio: approx fraction of *trials* that are part of 2–4‑in‑a‑row target streaks
-   - gapSpanLengthRange: inclusive range for a long no‑target span; at least one is placed
+   CONTROLLED TARGET POLICY (evenness guardrails)
+   - targetRatioByN / overrideRatio: overall density
+   - windows: distribute targets across windows (~evenness across time)
+   - streak controls: cap long streaks; guarantee some singles; spacing between streaks
+   - long gap: at least one no-target span of length in [min,max]
    ──────────────────────────────────────────────────────────────────────────── */
 const TARGET_POLICY = {
-    targetRatioByN: { 1: 0.30, 2: 0.30, 3: 0.30 }, // literature‑typical default (~30%) for analyzed trials [1](https://www.millisecond.com/download/library/v7/nback/singlenbacktask_shapes/singlenbacktask_shapes/singlenbacktask_shapes.manual)
-    overrideRatio: null, // e.g., 0.40 for 12/30; set to null to use typical defaults above
-    streakTrialRatio: 0.15,  // ≈15% of total trials are in 2–4‑in‑a‑row target streaks
-    gapSpanLengthRange: [8, 10] // place at least one long no‑target span of this length
+  targetRatioByN: { 1: 0.30, 2: 0.30, 3: 0.30 }, // typical baseline
+  overrideRatio: null,           // e.g., 0.40 → ~12 targets in 30; null = use table above
+  windows: 3,                    // split [n..end] into W windows for distribution
+  windowTolerance: 1,            // allow ±1 deviation from computed window quota
+  minSinglesRatio: 0.35,         // ≥35% of targets must be singles
+  streakTrialRatio: 0.15,        // ≈15% of *trials* involved in streaks
+  allowLengths: [2,3,4],         // streak lengths allowed
+  maxByLength: { 4: 1, 3: 2 },   // cap: ≤1 four‑in‑a‑row and ≤2 three‑in‑a‑row
+  maxConsecutiveTargets: 4,      // hard cap on streak length in final layout
+  minSpacingBetweenStreaks: 2,   // aim for ≥2 non‑targets between streak groups
+  gapSpanLengthRange: [8, 10]    // at least one long gap (no targets)
 };
 
 /* ────────────────────────────────────────────────────────────────────────────
-   NAVIGATION HELPERS (unchanged)
+   NAVIGATION HELPERS
    ──────────────────────────────────────────────────────────────────────────── */
 function hideAllPages() {
     menuEl.style.display = "none";
@@ -518,7 +491,7 @@ loadTtsSettings();
 [voiceSelect, ttsRateSel, ttsPitchSel, ttsVolSel].forEach(el => el.addEventListener('change', saveTtsSettings));
 
 /* ────────────────────────────────────────────────────────────────────────────
-   TTS VOICES (unchanged core; honors saved preference)
+   TTS VOICES
    ──────────────────────────────────────────────────────────────────────────── */
 function populateVoices() {
     availableVoices = window.speechSynthesis.getVoices() || [];
@@ -586,8 +559,7 @@ matchBtn.addEventListener("keydown", (e) => {
 
 /* ────────────────────────────────────────────────────────────────────────────
    START EXPERIMENT
-   - Replaces naive random sequence with a ***controlled*** sequence:
-     buildControlledSequence(trials, n, pool, TARGET_POLICY)
+   - Uses the controlled sequence generator below.
    ──────────────────────────────────────────────────────────────────────────── */
 function startExperiment(cond) {
     if (!availableVoices.length) { populateVoices(); setTimeout(()=>{},0); }
@@ -605,12 +577,11 @@ function startExperiment(cond) {
     document.getElementById("conditionLabel").textContent =
         "Condition " + cond + (cond <= 2 ? "" : " (with visual distractor)");
 
-    trials = 30; // you can change this if you want longer blocks
+    trials = 30; // change if you want longer blocks
 
-    // Choose the appropriate stimulus pool by condition
     const pool = (condition === 1 || condition === 3) ? LETTERS : TONES;
 
-    // *** Controlled sequence generation ***
+    // *** Controlled sequence generation (evenness edition) ***
     sequence = buildControlledSequence(trials, n, pool, TARGET_POLICY);
 
     // Reset run state
@@ -622,7 +593,6 @@ function startExperiment(cond) {
     clearTimeout(distractorTimeoutId);
     window.speechSynthesis.cancel();
 
-    // Show fixation under title; ensure distractor hidden initially
     fixation.classList.remove("hidden");
     visualBox.style.visibility = "hidden";
     visualBox.textContent = "";
@@ -631,19 +601,26 @@ function startExperiment(cond) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   AUDIO HELPERS (unchanged)
+   AUDIO HELPERS
    ──────────────────────────────────────────────────────────────────────────── */
 function playTone(freq) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const now = ctx.currentTime;
+
     osc.frequency.value = freq;
+
+    // Fade in/out to avoid clicks
     gain.gain.setValueAtTime(0, now);
     gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
     gain.gain.linearRampToValueAtTime(0.22, now + 0.35);
     gain.gain.linearRampToValueAtTime(0, now + 0.4);
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(now); osc.stop(now + 0.42);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.42);
 }
 function speakLetter(letter) {
     const utter = new SpeechSynthesisUtterance(letter);
@@ -677,7 +654,7 @@ function backToMenu() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   TRIAL LOOP & INPUT (unchanged, now using the controlled sequence)
+   TRIAL LOOP & INPUT
    ──────────────────────────────────────────────────────────────────────────── */
 function nextTrial() {
     if (!runActive) return;
@@ -686,7 +663,7 @@ function nextTrial() {
     trialActive = true;
     const stim = sequence[index];
 
-    // Visual handling for distractors (3/4): hide fixation briefly and show symbol
+    // Visual distractor (Cond 3/4): hide fixation briefly and show symbol
     if (condition === 3 || condition === 4) {
         fixation.classList.add("hidden");
         visualBox.textContent = DISTRACTORS[Math.floor(Math.random() * DISTRACTORS.length)];
@@ -733,7 +710,7 @@ function registerResponse() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   END EXPERIMENT (unchanged)
+   END EXPERIMENT
    ──────────────────────────────────────────────────────────────────────────── */
 function endExperiment() {
     if (!runActive) return;
@@ -766,134 +743,230 @@ function endExperiment() {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
-   *** CONTROLLED SEQUENCE ENGINE ***
-   - Builds a length=`trials` sequence from `pool` (letters or tones) for N-back.
-   - Enforces:
-     • desired target ratio (typical ~30% or override),
-     • ≥1 long no‑target span (8–10),
-     • some multi‑match streaks (2–4 in a row) covering ~15% of trials.
-   - Strategy:
-     1) Decide target positions among indices [n .. trials-1] (first N cannot be targets).
-     2) Carve a long gap segment with no targets.
-     3) Insert a few streak groups (2–4 consecutive target indices), avoiding the gap.
-     4) Fill remaining targets as singletons.
-     5) Generate actual symbols left→right:
-        - If i is a target: x[i] = x[i‑N]
-        - Else: x[i] ≠ x[i‑N] (to avoid accidental targets)
-        - Early items (i < N): pick freely.
+   *** CONTROLLED SEQUENCE ENGINE (EVENNESS EDITION) ***
+   See header comments for design goals and constraints.
    ──────────────────────────────────────────────────────────────────────────── */
 function buildControlledSequence(trials, n, pool, policy) {
-    // 0) helpers
-    const randInt = (a,b) => Math.floor(Math.random()*(b-a+1))+a; // inclusive
-    const shuffle = (arr) => arr.sort(() => Math.random()-0.5);
-    const chooseRandom = (arr) => arr[Math.floor(Math.random()*arr.length)];
-    const chooseFromPoolNot = (pool, forbidden) => {
-        // Return any item from pool not in the forbidden Set (or !== single value)
-        if (forbidden instanceof Set) {
-            const candidates = pool.filter(x => !forbidden.has(x));
-            return chooseRandom(candidates.length ? candidates : pool);
-        } else {
-            return chooseRandom(pool.filter(x => x !== forbidden).length ? pool.filter(x => x !== forbidden) : pool);
+  const randInt = (a,b) => Math.floor(Math.random()*(b-a+1))+a; // inclusive
+  const pick = (arr) => arr[Math.floor(Math.random()*arr.length)];
+  const shuffle = (arr) => arr.sort(()=>Math.random()-0.5);
+  const notEqFromPool = (pool, forbid) => {
+    const cands = pool.filter(x => x !== forbid);
+    return pick(cands.length ? cands : pool);
+  };
+
+  if (trials <= 0) return [];
+  if (n < 0) n = 0;
+  const validStart = Math.min(n, trials);
+  const validEnd   = trials - 1;
+  const validCount = Math.max(0, trials - n);
+
+  const baseRatio = (policy.overrideRatio != null)
+    ? policy.overrideRatio
+    : (policy.targetRatioByN[n] ?? 0.30);
+  let desiredTargets = Math.round(baseRatio * trials);
+  desiredTargets = Math.min(desiredTargets, validCount);
+  if (desiredTargets === 0 && validCount > 0) desiredTargets = 1;
+
+  // Long no‑target gap
+  const [gapMin, gapMax] = policy.gapSpanLengthRange || [8,10];
+  const gapLen = Math.min(randInt(gapMin, gapMax), validCount);
+  const gapStart = (validCount > gapLen) ? (validStart + randInt(0, validCount - gapLen)) : validStart;
+  const gapIndices = new Set();
+  for (let i = gapStart; i < gapStart + gapLen; i++) gapIndices.add(i);
+
+  // Windowing (spread targets)
+  const W = Math.max(1, policy.windows || 1);
+  const winBounds = [];
+  const span = validEnd - validStart + 1;
+  for (let w=0; w<W; w++) {
+    const s = validStart + Math.floor(w*span/W);
+    const e = validStart + Math.floor((w+1)*span/W) - 1;
+    winBounds.push([s, e]);
+  }
+  const winSlots = winBounds.map(([s,e]) => {
+    let nSlots = 0;
+    for (let i=s;i<=e;i++) if (!gapIndices.has(i)) nSlots++;
+    return nSlots;
+  });
+  const totalFreeSlots = winSlots.reduce((a,b)=>a+b,0);
+  let winTarget = winSlots.map(ns => Math.round((ns/Math.max(1,totalFreeSlots))*desiredTargets));
+  let diff = desiredTargets - winTarget.reduce((a,b)=>a+b,0);
+  while (diff !== 0) {
+    const idx = (diff>0)
+      ? winSlots.indexOf(Math.max(...winSlots))
+      : winTarget.indexOf(Math.max(...winTarget));
+    if (idx === -1) break;
+    winTarget[idx] += (diff>0 ? 1 : -1);
+    diff = desiredTargets - winTarget.reduce((a,b)=>a+b,0);
+  }
+  const tol = Math.max(0, policy.windowTolerance ?? 0);
+
+  // Streak composition
+  const minSingles = Math.ceil((policy.minSinglesRatio ?? 0.35) * desiredTargets);
+  let streakBudget = Math.min(
+    Math.max(0, Math.round((policy.streakTrialRatio ?? 0.15) * trials)),
+    desiredTargets - minSingles
+  );
+  const allowL = (policy.allowLengths || [2,3,4]).slice().sort((a,b)=>b-a);
+  const maxByL = policy.maxByLength || {4:1,3:2};
+  const streaks = [];
+  for (const L of allowL) {
+    const cap = Math.max(0, maxByL[L] ?? Infinity);
+    for (let k=0; k<cap && streakBudget >= L; k++) {
+      streaks.push(L);
+      streakBudget -= L;
+    }
+  }
+  while (streakBudget >= 2) { streaks.push(2); streakBudget -= 2; }
+
+  const streakTargetCount = streaks.reduce((a,b)=>a+b,0);
+  let singlesCount = Math.max(0, desiredTargets - streakTargetCount);
+  while (singlesCount < minSingles && streaks.length) {
+    const L = streaks.pop();
+    singlesCount += L;
+  }
+
+  const chosen = new Set();
+  const maxLenCap = Math.max(1, policy.maxConsecutiveTargets || 4);
+
+  function canPlaceStreak(idx, L, wIdx) {
+    const [ws, we] = winBounds[wIdx];
+    for (let k=0;k<L;k++) {
+      const pos = idx + k;
+      if (pos < ws || pos > we) return false;
+      if (gapIndices.has(pos)) return false;
+      if (chosen.has(pos)) return false;
+      if (pos < validStart) return false;
+    }
+    const pad = Math.max(0, policy.minSpacingBetweenStreaks ?? 0);
+    for (let p = idx - pad; p <= idx + L - 1 + pad; p++) {
+      if (p < ws || p > we) continue;
+      if (p >= idx && p <= idx+L-1) continue;
+      if (chosen.has(p)) return false;
+    }
+    return true;
+  }
+
+  const winRemain = winTarget.slice();
+  const streaksShuffled = shuffle(streaks.slice());
+  for (let sIdx=0; sIdx<streaksShuffled.length; sIdx++) {
+    const L = Math.min(streaksShuffled[sIdx], maxLenCap);
+    let placed = false;
+    for (let pass=0; pass<2 && !placed; pass++) {
+      for (let w=0; w<winBounds.length && !placed; w++) {
+        const [ws, we] = winBounds[w];
+        if (winRemain[w] < Math.max(0, L - tol)) continue;
+        const candidates = [];
+        for (let start = ws; start <= we - L + 1; start++) {
+          let ok = true;
+          for (let k=0;k<L;k++) {
+            const pos = start+k;
+            if (gapIndices.has(pos) || pos < validStart) { ok=false; break; }
+          }
+          if (ok) candidates.push(start);
         }
-    };
-
-    // 1) figure desired target count over valid positions [n..trials-1]
-    const validCount = Math.max(0, trials - n);
-    const baseRatio = (policy.overrideRatio != null) ? policy.overrideRatio
-                    : (policy.targetRatioByN[n] ?? 0.30);
-    // Targets are decided over *total trials* for simplicity and user intuition,
-    // but we must ensure they fit in valid slots [n..]: cap accordingly.
-    let desiredTargets = Math.round(baseRatio * trials);
-    desiredTargets = Math.min(desiredTargets, validCount);
-
-    // Edge case: if desiredTargets is very small, ensure at least 1 target (for non‑0 N)
-    if (desiredTargets === 0 && validCount > 0) desiredTargets = 1;
-
-    // 2) prepare candidate index list where targets are allowed
-    const candidates = [];
-    for (let i = n; i < trials; i++) candidates.push(i);
-
-    // 3) carve at least one long no‑target span (8–10 by default)
-    const [gapMin, gapMax] = policy.gapSpanLengthRange || [8,10];
-    const gapLen = Math.min(randInt(gapMin, gapMax), validCount);
-    // Choose a start so that the gap fully lies within [n..trials-1]
-    const gapStart = (validCount > gapLen) ? (n + randInt(0, validCount - gapLen)) : n;
-    const gapIndices = new Set();
-    for (let i = gapStart; i < gapStart + gapLen; i++) gapIndices.add(i);
-
-    // Remove gap indices from candidate pool
-    const free = candidates.filter(i => !gapIndices.has(i));
-
-    // 4) plan multi‑match streaks: total target *trials* in streaks ≈ streakTrialRatio * trials
-    let streakTargetBudget = Math.min(desiredTargets - 1, Math.max(0, Math.round((policy.streakTrialRatio || 0.15) * trials)));
-    const streakGroups = [];
-    // Greedy assemble 2–4 length groups until budget is exhausted (or cannot place more)
-    while (streakTargetBudget >= 2) {
-        const len = Math.min(randInt(2,4), streakTargetBudget);
-        streakGroups.push(len);
-        streakTargetBudget -= len;
-    }
-
-    // 5) place streak groups into the free index space, avoiding overlaps and the gap
-    const taken = new Set(); // will collect all chosen target indices
-    const freeSorted = [...free].sort((a,b)=>a-b);
-
-    function canPlaceStreak(start, len) {
-        for (let k=0;k<len;k++) {
-            const idx = start + k;
-            if (!freeSorted.includes(idx)) return false; // must be in free list
-            if (taken.has(idx)) return false;            // not already taken
-            // Also avoid running off the end
-            if (idx >= trials) return false;
+        shuffle(candidates);
+        for (const start of candidates) {
+          if (!canPlaceStreak(start, L, w)) continue;
+          for (let k=0;k<L;k++) chosen.add(start+k);
+          winRemain[w] = Math.max(0, winRemain[w] - L);
+          placed = true;
+          break;
         }
-        return true;
+      }
     }
-
-    // try random placements for each streak group with limited attempts
-    for (const len of streakGroups) {
-        let placed = false;
-        for (let attempt = 0; attempt < 60; attempt++) {
-            // start must be in free & allow len consecutive
-            const candidateStarts = freeSorted.filter(i => i+len-1 < trials);
-            const start = chooseRandom(candidateStarts);
-            if (start == null) break;
-            if (canPlaceStreak(start, len)) {
-                for (let k=0;k<len;k++) taken.add(start+k);
-                placed = true;
-                break;
-            }
+    if (!placed) {
+      outer:
+      for (let w=0; w<winBounds.length; w++) {
+        const [ws,we] = winBounds[w];
+        for (let start = ws; start <= we - L + 1; start++) {
+          let ok = true;
+          for (let k=0;k<L;k++) {
+            const pos = start+k;
+            if (gapIndices.has(pos) || chosen.has(pos) || pos < validStart) { ok=false; break; }
+          }
+          if (ok) {
+            for (let k=0;k<L;k++) chosen.add(start+k);
+            winRemain[w] = Math.max(0, winRemain[w] - L);
+            placed = true;
+            break outer;
+          }
         }
-        // if not placed, skip this streak silently
+      }
     }
+    if (!placed) singlesCount += L;
+  }
 
-    // 6) fill remaining targets as singletons from remaining free slots
-    const remainingNeeded = Math.max(0, desiredTargets - taken.size);
-    const singlesPool = freeSorted.filter(i => !taken.has(i));
-    shuffle(singlesPool);
-    for (let i=0; i<remainingNeeded && i<singlesPool.length; i++) taken.add(singlesPool[i]);
-
-    // 7) create the actual stimulus sequence honoring target/non‑target logic
-    const seq = new Array(trials).fill(null);
-
-    // First N items: free picks (these cannot be targets by definition)
-    for (let i = 0; i < Math.min(n, trials); i++) {
-        seq[i] = chooseRandom(pool);
+  function freeSlotsInWindow(w) {
+    const [ws,we] = winBounds[w];
+    const arr = [];
+    for (let i=ws;i<=we;i++) {
+      if (i >= validStart && !gapIndices.has(i) && !chosen.has(i)) arr.push(i);
     }
-
-    // Remaining items
-    for (let i = n; i < trials; i++) {
-        const isTargetPos = taken.has(i); // we planned this index as a target
-        if (isTargetPos) {
-            // Force this to match the item N back
-            seq[i] = seq[i - n];
-        } else {
-            // Must NOT equal the item N back (to avoid accidental target)
-            const forbidden = seq[i - n];
-            seq[i] = chooseFromPoolNot(pool, forbidden);
-        }
+    return arr;
+  }
+  for (let w=0; w<winBounds.length && singlesCount>0; w++) {
+    let need = Math.max(0, winRemain[w]);
+    let pool = freeSlotsInWindow(w);
+    shuffle(pool);
+    while (need>0 && pool.length && singlesCount>0) {
+      const pos = pool.pop();
+      chosen.add(pos);
+      need--; singlesCount--;
     }
+    winRemain[w] = Math.max(0, need);
+  }
+  if (singlesCount > 0) {
+    let allFree = [];
+    for (let w=0; w<winBounds.length; w++) allFree = allFree.concat(freeSlotsInWindow(w));
+    allFree = allFree.filter(i => !chosen.has(i));
+    shuffle(allFree);
+    while (singlesCount>0 && allFree.length) {
+      chosen.add(allFree.pop());
+      singlesCount--;
+    }
+  }
 
-    return seq;
+  let currentTargets = chosen.size;
+  if (currentTargets < desiredTargets) {
+    const spare = [];
+    for (let i=validStart;i<=validEnd;i++) {
+      if (!gapIndices.has(i) && !chosen.has(i)) spare.push(i);
+    }
+    shuffle(spare);
+    while (currentTargets < desiredTargets && spare.length) {
+      chosen.add(spare.pop());
+      currentTargets++;
+    }
+  }
+  if (currentTargets > desiredTargets) {
+    const allChosen = Array.from(chosen).sort((a,b)=>a-b);
+    while (chosen.size > desiredTargets && allChosen.length) {
+      chosen.delete(allChosen.pop());
+    }
+  }
+
+  const seq = new Array(trials).fill(null);
+  for (let i=0; i<Math.min(n,trials); i++) seq[i] = pick(pool);
+  for (let i=n; i<trials; i++) {
+    const isTarget = chosen.has(i);
+    if (isTarget) seq[i] = seq[i - n];
+    else          seq[i] = notEqFromPool(pool, seq[i - n]);
+  }
+
+  const cap = Math.max(1, policy.maxConsecutiveTargets || 4);
+  let run = 0;
+  for (let i=validStart;i<trials;i++) {
+    const isT = (i>=n && seq[i] === seq[i-n]);
+    run = isT ? run+1 : 0;
+    if (run > cap) {
+      seq[i] = notEqFromPool(pool, seq[i - n]);
+      run = 0;
+    }
+  }
+
+  return seq;
 }
 </script>
 </body>
