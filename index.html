@@ -898,6 +898,55 @@ function buildControlledSequence(trials, n, pool, policy) {
     if (!placed) singlesCount += L;
   }
 
+// Debug: inspect a generated sequence in the console
+function debugPrintBlock(seq, n, policy) {
+  // Build a target mask and a readable line
+  const isT = seq.map((_, i) => (i >= n && seq[i] === seq[i - n]));
+  const line = isT.map(b => (b ? 'T' : '·')).join('');
+
+  // Count totals and streaks
+  let totalT = 0, longestTStreak = 0, curT = 0;
+  let totalGap = 0, longestGap = 0, curGap = 0;
+  const streakHist = {}; // length -> count
+  for (let i = 0; i < isT.length; i++) {
+    if (isT[i]) {
+      totalT++; curT++; longestTStreak = Math.max(longestTStreak, curT);
+      if (curGap > 0) { longestGap = Math.max(longestGap, curGap); curGap = 0; }
+    } else {
+      if (curT > 0) { streakHist[curT] = (streakHist[curT] || 0) + 1; curT = 0; }
+      curGap++; totalGap++;
+    }
+  }
+  if (curT > 0) { streakHist[curT] = (streakHist[curT] || 0) + 1; }
+  if (curGap > 0) { longestGap = Math.max(longestGap, curGap); }
+
+  // Window counts (same partitioning as generator)
+  const validStart = Math.min(n, seq.length);
+  const validEnd = seq.length - 1;
+  const W = Math.max(1, policy.windows || 1);
+  const span = validEnd - validStart + 1;
+  const windowBounds = [];
+  for (let w = 0; w < W; w++) {
+    const s = validStart + Math.floor(w * span / W);
+    const e = validStart + Math.floor((w + 1) * span / W) - 1;
+    windowBounds.push([s, e]);
+  }
+  const perWindowT = windowBounds.map(([s,e]) =>
+    isT.slice(s, e + 1).reduce((a,b) => a + (b ? 1 : 0), 0)
+  );
+
+  console.log('Pattern: ', line);
+  console.log('Targets:', totalT,
+              '| Longest T-streak:', longestTStreak,
+              '| Longest no-target gap:', longestGap);
+  console.log('Streak histogram (len:count):', streakHist);
+  console.log('Per-window target counts:', perWindowT);
+}
+
+// Example usage while testing:
+// sequence = buildControlledSequence(30, 2, LETTERS, TARGET_POLICY);
+// debugPrintBlock(sequence, 2, TARGET_POLICY);
+
   function freeSlotsInWindow(w) {
     const [ws,we] = winBounds[w];
     const arr = [];
