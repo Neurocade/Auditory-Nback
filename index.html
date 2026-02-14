@@ -43,6 +43,20 @@ button {
     font-size: 30px;
     background: #4caf50;
     color: black;
+    cursor: pointer;
+    border: none;
+    border-radius: 10px;
+}
+
+/* ================================
+VISUAL FEEDBACK WHEN BUTTON PRESSED
+Makes the MATCH button flash when clicked
+================================ */
+
+#matchBtn.pressed {
+    background: #2ecc71;     /* Brighter green */
+    transform: scale(0.95);  /* Slight press-in effect */
+    transition: transform 0.1s ease, background 0.1s ease;
 }
 
 select {
