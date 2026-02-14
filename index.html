@@ -284,8 +284,26 @@ function speak(letter) {
 }
 
 document.getElementById("matchBtn").addEventListener("click", () => {
+
     if (!trialActive) return;
+
+    // Register response
     results[index].responded = true;
+
+    // ===============================
+    // VISUAL CONFIRMATION FEEDBACK
+    // Temporarily add "pressed" class
+    // ===============================
+
+    const btn = document.getElementById("matchBtn");
+
+    btn.classList.add("pressed");
+
+    // Remove the visual effect after 150 ms
+    setTimeout(() => {
+        btn.classList.remove("pressed");
+    }, 150);
+
 });
 
 /* ========================================================
