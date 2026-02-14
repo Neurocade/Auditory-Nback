@@ -151,18 +151,18 @@ function loadProgress() {
             sessions: 0,
             bestLevel: 1,
             accuracyHistory: [],
-            bestAccuracyEver: 0
+            bestAccuracyEver: 0,
+            lastRoundAccuracy: 0
         };
     }
 
-    // 🔧 Fix for older saved data that doesn't have this field yet
-    if (data.bestAccuracyEver === undefined) {
-        data.bestAccuracyEver = 0;
-    }
+    // Backward compatibility for older saved data
+    if (data.bestAccuracyEver === undefined) data.bestAccuracyEver = 0;
+    if (data.lastRoundAccuracy === undefined) data.lastRoundAccuracy = 0;
 
     return data;
 }
-
+    
 function saveProgress(level, accuracy) {
     let data = loadProgress();
 
@@ -170,7 +170,10 @@ function saveProgress(level, accuracy) {
     data.bestLevel = Math.max(data.bestLevel, level);
     data.accuracyHistory.push(accuracy);
 
-    // Track best ever accuracy
+    // Save last round accuracy
+    data.lastRoundAccuracy = lastRoundAccuracy;
+
+    // Track best ever session accuracy
     if (accuracy > data.bestAccuracyEver) {
         data.bestAccuracyEver = accuracy;
     }
@@ -194,10 +197,11 @@ function displayProgress() {
         Sessions Completed: ${data.sessions}<br>
         Best Level Reached: ${data.bestLevel}-back<br>
         Average Accuracy: ${avg}%<br>
+        Last Round Accuracy: ${data.lastRoundAccuracy}%<br>
         Best Ever Accuracy: ${data.bestAccuracyEver}%<br><br>
     `;
 }
-
+    
 displayProgress();
 
 /* ========================================================
