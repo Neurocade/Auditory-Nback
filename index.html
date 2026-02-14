@@ -155,6 +155,11 @@ function loadProgress() {
         };
     }
 
+    // 🔧 Fix for older saved data that doesn't have this field yet
+    if (data.bestAccuracyEver === undefined) {
+        data.bestAccuracyEver = 0;
+    }
+
     return data;
 }
 
