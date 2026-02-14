@@ -134,10 +134,12 @@ let trialActive = false;
 let sessionStartTime = 0;
 let timerMode = false;
 let totalSessionAccuracy = [];
+let lastRoundAccuracy = 0; 
 
 /* ========================================================
 PROGRESS TRACKING SYSTEM (NEW)
-Uses localStorage to track long-term improvement
+Uses localStorage to track long-term improvement. Track Avg 
+accuracy, accuracy for last round, best accuracy all-time
 ======================================================== */
 
 function loadProgress() {
@@ -147,7 +149,8 @@ function loadProgress() {
         data = {
             sessions: 0,
             bestLevel: 1,
-            accuracyHistory: []
+            accuracyHistory: [],
+            bestAccuracyEver: 0
         };
     }
 
@@ -160,6 +163,11 @@ function saveProgress(level, accuracy) {
     data.sessions += 1;
     data.bestLevel = Math.max(data.bestLevel, level);
     data.accuracyHistory.push(accuracy);
+
+    // Track best ever accuracy
+    if (accuracy > data.bestAccuracyEver) {
+        data.bestAccuracyEver = accuracy;
+    }
 
     localStorage.setItem("attentionProgress", JSON.stringify(data));
 }
@@ -174,6 +182,15 @@ function displayProgress() {
             data.accuracyHistory.length
         );
     }
+
+    document.getElementById("progressSummary").innerHTML = `
+        <h2>Your Progress</h2>
+        Sessions Completed: ${data.sessions}<br>
+        Best Level Reached: ${data.bestLevel}-back<br>
+        Average Accuracy: ${avg}%<br>
+        Best Ever Accuracy: ${data.bestAccuracyEver}%<br><br>
+    `;
+}
 
     document.getElementById("progressSummary").innerHTML = `
         <h2>Your Progress</h2>
@@ -339,6 +356,7 @@ function endBlock() {
     let accuracy = totalTargets === 0 ? 0 :
         Math.round((hits / totalTargets) * 100);
 
+    lastRoundAccuracy = accuracy;
     totalSessionAccuracy.push(accuracy);
 
     /* ===============================
@@ -391,12 +409,13 @@ function endSession() {
         "Keep practicing — attention improves with training.";
 
     resultsDiv.innerHTML = `
-        <h2>Session Complete</h2>
-        Average Accuracy: ${avgAccuracy}%<br>
-        Final Level Reached: ${n}-back<br>
-        <div class="encouragement">${message}</div>
-        <button onclick="location.reload()">Train Again</button>
-    `;
+    <h2>Session Complete</h2>
+    Average Accuracy: ${avgAccuracy}%<br>
+    Last Round Accuracy: ${lastRoundAccuracy}%<br>
+    Final Level Reached: ${n}-back<br>
+    <div class="encouragement">${message}</div>
+    <button onclick="location.reload()">Train Again</button>
+`;
 }
 
 </script>
