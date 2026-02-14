@@ -1,1077 +1,364 @@
-
-<!--
-File: nback.html
-Purpose: Auditory N‑Back task with 4 conditions (letters/tones ± visual distractor),
-         N‑back & ISI selectors, Instructions page, Voice Settings page (TTS with persistence & test),
-         fixation cross under title, Back buttons, MATCH flash, correct RT/indexing,
-         and ***controlled target scheduling*** with evenness guardrails.
-
-WHAT’S INCLUDED
-- 4 Conditions:
-  (1) Letters (spoken), (2) Sounds (tones), (3) Letters + visual distractor, (4) Sounds + visual distractor.
-- N‑back selector (1–3).
-- ISI selector (1000–3000 ms).
-- Fixation cross under the title (2× size); hides only during distractors in Cond 3/4’s stimulus window.
-- MATCH button with flash feedback; Space/Enter support (scoped to the button).
-- Back to Menu; safe cleanup of timers and TTS.
-- Instructions page (per‑condition guidance); Back to Home.
-- Voice Settings page (TTS voice/rate/pitch/volume), settings persisted via localStorage, with “Test voice”.
-- ***NEW*** Controlled sequence generator:
-  • Typical target ratio ≈30% (literature‑typical), overrideable (e.g., 30% ≈ 12/40),
-  • ~15% of *trials* involved in 2–4‑in‑a‑row streaks (bounded, spaced, and capped),
-  • ≥1 long no‑target span (8–10) per block,
-  • Per‑window quotas to distribute targets more evenly across the block.
-
-NOTES
-- To force ~12 matches in 40: set TARGET_POLICY.overrideRatio = 0.30.
-- If constraints are tight on a random draw, the generator relaxes soft constraints (spacing/tolerance) before touching streak caps.
-
--->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Auditory N-Back Task</title>
+<meta charset="UTF-8">
+<title>Attention Training Program</title>
+
 <style>
-         /* Game instruction styling */
-         .rules {
-           line-height: 1.6;
-            margin-left: 1.5em;
-         }
+/* ========================================================
+SENIOR FRIENDLY DESIGN
+Large fonts, high contrast, low clutter
+======================================================== */
 
-         .rules li {
-            margin-bottom: 1.0em;
-         }
-
-         h2 {
-            margin-top: 2em;
-}
-         .instruct-block {
-    line-height: 1.9;
-}
-
-         
-:root {
-    --fixation-size: 144px;      /* 2× bigger cross for better visibility */
-    --fixation-box-height: 180px;/* vertical space reserved under the title */
-    --fixation-shift: 22px;      /* push cross down to visually center between title & UI */
-}
 body {
     font-family: Arial, sans-serif;
     background: #111;
-    color: #eee;
+    color: #fff;
     display: flex;
     justify-content: center;
-    align-items: flex-start;   /* was center */
-    min-height: 100vh;         /* was height: 100vh */
-    margin: 0;
-    padding-top: 40px;         /* optional spacing from top */
+    padding-top: 30px;
 }
 
 #app {
-    width: 780px;
+    width: 850px;
     background: #1e1e1e;
-    padding: 24px;
+    padding: 30px;
     border-radius: 12px;
-    box-shadow: 0 0 20px rgba(0,0,0,0.5);
     text-align: center;
 }
+
+h1 { font-size: 34px; }
+h2 { font-size: 26px; }
+
 button {
-    padding: 12px 20px;
+    font-size: 22px;
+    padding: 14px 24px;
     margin: 10px;
-    font-size: 16px;
-    border-radius: 8px;
+    border-radius: 10px;
     border: none;
     cursor: pointer;
-    transition: background-color 100ms ease, transform 40ms ease;
 }
-#matchBtn { background: #4caf50; color: #000; }
-#matchBtn.flash { background: #7fff7f !important; }
-#backBtn, #homeBtn, .secondaryBtn { background: #9e9e9e; color: #000; }
 
-.controls {
-    display: inline-flex;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 12px;
-    background: #252525;
-    padding: 10px 12px;
-    border-radius: 8px;
-    flex-wrap: wrap;
-    justify-content: center;
+#matchBtn {
+    font-size: 30px;
+    background: #4caf50;
+    color: black;
 }
-label { color: #ddd; font-size: 14px; }
+
 select {
-    padding: 6px 8px;
-    font-size: 14px;
-    border-radius: 6px;
-    border: 1px solid #444;
-    background: #1b1b1b;
-    color: #eee;
+    font-size: 20px;
+    padding: 8px;
+    margin: 6px;
 }
 
-/* Fixation cross under title */
-#topFixationWrap {
-    height: var(--fixation-box-height);
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    margin: 6px 0 10px;
-}
 #fixation {
-    font-size: var(--fixation-size);
-    line-height: 1;
+    font-size: 120px;
+    margin: 30px 0;
     color: #bbb;
-    margin-top: var(--fixation-shift);
-}
-.hidden { visibility: hidden; }
-
-/* Stimulus-only area (for distractors in Cond 3 & 4) */
-#stimulusArea {
-    margin-top: 16px;
-    height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-#visualStimulus {
-    font-size: 72px;
-    line-height: 1;
-    visibility: hidden; /* prevents layout jumps when toggling */
 }
 
-/* Results panel */
 #results {
-    text-align: left;
-    margin-top: 20px;
-    background: #2a2a2a;
-    padding: 16px;
-    border-radius: 8px;
     display: none;
+    font-size: 22px;
 }
 
-/* Small helper text */
-.small { color: #aaa; font-size: 12px; margin-top: 8px; }
-
-/* Instructions page */
-#instructions {
-    display: none;
-    text-align: left;
-    background: #222;
-    padding: 16px;
-    border-radius: 10px;
+.encouragement {
+    font-size: 26px;
+    margin-top: 15px;
+    color: #7CFF7C;
 }
-#instructions h2 { text-align: center; margin-top: 0; }
-.instruct-block {
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    padding: 12px;
-    border-radius: 8px;
-    margin: 10px 0;
-}
-
-/* Voice settings page */
-#voiceSettings {
-    display: none;
-    text-align: left;
-    background: #222;
-    padding: 16px;
-    border-radius: 10px;
-}
-#voiceSettings h2 { text-align: center; margin-top: 0; }
-.setting-group {
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    padding: 12px;
-    border-radius: 8px;
-    margin: 10px 0;
-}
-.setting-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin: 6px 0;
-}
-.setting-row label { min-width: 64px; }
-.note { color: #bbb; font-size: 13px; margin: 6px 0 0 0; }
-.testBtn { background: #2196f3; color: #000; }
 </style>
 </head>
+
 <body>
-
 <div id="app">
-    <h1>Auditory N-Back Task</h1>
 
-    <!-- Fixation cross (under title) -->
-    <div id="topFixationWrap">
-        <div id="fixation" class="hidden">+</div>
-    </div>
+<h1>Attention Training</h1>
 
-    <!-- MENU (home screen) -->
-    <div id="menu">
-        <div class="controls">
-            <label for="nSelect">N‑back:</label>
-            <select id="nSelect" aria-label="Select N-back level">
-                <option value="1">1‑back</option>
-                <option value="2" selected>2‑back</option>
-                <option value="3">3‑back</option>
-            </select>
+<div id="menu">
 
-            <label for="isiSelect">ISI (ms):</label>
-            <select id="isiSelect" aria-label="Select inter-stimulus interval">
-                <option value="00">Slow (00)</option>
-                <option value="2500">Moderate (2500)</option>
-                <option value="2000" selected>Default (2000)</option>
-                <option value="1500">Fast (1500)</option>
-                <option value="1000">Very Fast (1000)</option>
-            </select>
-        </div>
+<!-- ===============================
+PROGRESS TRACKING DISPLAY
+This loads saved data from localStorage
+================================ -->
+<div id="progressSummary"></div>
 
-        <p>Select Condition</p>
-        <div>
-            <button type="button" onclick="startExperiment(1)">Condition 1: Letters</button>
-            <button type="button" onclick="startExperiment(2)">Condition 2: Sounds</button>
-        </div>
-        <div>
-            <button type="button" onclick="startExperiment(3)">Letters + Visual Distractor</button>
-            <button type="button" onclick="startExperiment(4)">Sounds + Visual Distractor</button>
-        </div>
+<label>
+<input type="checkbox" id="timerMode">
+  15-Minute Structured Session Mode
+</label>
 
-        <!-- Buttons for other pages -->
-        <div>
-            <button type="button" class="secondaryBtn" onclick="showInstructions()">Instructions</button>
-            <button type="button" class="secondaryBtn" onclick="showVoiceSettings()">Audio/Voice Settings</button>
-        </div>
+<br><br>
 
-        <p class="small">Tip: Space/Enter activates MATCH once the task begins.</p>
-    </div>
+<button onclick="startExperiment()">Start Training</button>
 
-    <!-- TASK (run screen) -->
-    <div id="task" style="display:none;">
-        <div style="display:flex; align-items:center; gap:12px; justify-content:flex-start;">
-            <button id="backBtn" type="button" onclick="backToMenu()" aria-label="Back to menu">← Back</button>
-        </div>
-
-        <h2 id="conditionLabel"></h2>
-        <p>
-            N‑back level: <span id="nLevel">2</span>
-            &nbsp;|&nbsp; ISI: <span id="isiLabel">2000</span> ms
-        </p>
-
-        <button id="matchBtn" type="button" aria-label="Match (press Space or Enter)">MATCH</button>
-
-        <div id="stimulusArea">
-            <div id="visualStimulus"></div>
-        </div>
-
-        <div id="status"></div>
-    </div>
-
-    <!-- RESULTS -->
-    <div id="results"></div>
-
-    <!-- INSTRUCTIONS PAGE -->
-    <div id="instructions">
-        <h2>Instructions</h2>
-
-       <div class="instruct-block">
-    <h3>General (N-Back Rule)</h3>
-    <ul>
-        <li>You will hear a sequence of items (letters or sounds), one at a time.</li>
-
-        <li>Each item (letter or sound) counts as its own trial.</li>
-
-        <li>
-            Press <b>MATCH</b> if the current item is the same as the one from 
-            <b>N trials back</b>.
-        </li>
-
-        <li>
-            Note: "N" refers to the number of trials, and "N back" refers to 
-            the number of trials preceding the current one.
-        </li>
-
-        <li>
-            Example (2-back): If the current item matches the one two items ago,
-            click <b>MATCH</b> using your mouse.
-        </li>
-
-        <li>
-            Example (1-back): If the current item matches the one immediately
-            preceding it (one trial back), click <b>MATCH</b>.
-        </li>
-
-        <li>
-            Example (2-back): You hear "L...B...L" — click <b>MATCH</b>.
-        </li>
-
-        <li>
-            Example (2-back): You hear "L...B...K" — do NOT click <b>MATCH</b>.
-        </li>
-
-        <li>
-            Respond during the current item’s window; late clicks don’t count.
-        </li>
-
-        <li>
-            Change difficulty (N-back) and speed (ISI) on the home screen.
-        </li>
-    </ul>
 </div>
 
+<div id="task" style="display:none;">
+<h2 id="levelLabel"></h2>
+<div id="fixation">+</div>
+<button id="matchBtn">MATCH</button>
+</div>
 
-        <div class="instruct-block">
-            <h3>Condition 1: Letters</h3>
-            <ul>
-                <li>You will hear <b>spoken letters</b> (A–Z).</li>
-                <li>Press <b>MATCH</b> if the letter matches the letter from N items ago.</li>
-                <li>Tip: If letters are hard to hear, adjust the <b>Audio/Voice Settings</b> on the home screen.</li>
-            </ul>
-        </div>
+<div id="results"></div>
 
-        <div class="instruct-block">
-            <h3>Condition 2: Sounds</h3>
-            <ul>
-                <li>You will hear <b>tones</b> (different pitches).</li>
-                <li>Press <b>MATCH</b> if the current tone matches the tone from N items ago.</li>
-            </ul>
-        </div>
-
-        <div class="instruct-block">
-            <h3>Condition 3: Letters + Visual Distractor</h3>
-            <ul>
-                <li>You will hear <b>spoken letters</b> as in Condition 1.</li>
-                <li>During each item, a <b>visual symbol</b> briefly appears below the fixation cross.</li>
-                <li><b>Ignore</b> the symbol; it’s a distractor. Focus on the letters and the N‑back rule.</li>
-            </ul>
-        </div>
-
-        <div class="instruct-block">
-            <h3>Condition 4: Sounds + Visual Distractor</h3>
-            <ul>
-                <li>You will hear <b>tones</b> as in Condition 2.</li>
-                <li>During each item, a <b>visual symbol</b> briefly appears below the fixation cross.</li>
-                <li><b>Ignore</b> the symbol; it’s a distractor. Focus on the tones and the N‑back rule.</li>
-            </ul>
-        </div>
-
-        <div style="text-align:center; margin-top: 12px;">
-            <button id="homeBtn" type="button" onclick="backToHomeFromInstructions()">← Back to Home</button>
-        </div>
-    </div>
-
-    <!-- VOICE SETTINGS PAGE -->
-    <div id="voiceSettings">
-        <h2>Audio/Voice Settings</h2>
-
-        <div class="setting-group">
-            <h3>What these settings do</h3>
-            <ul>
-                <li><b>Voice</b>: The speaker used for letters. Pick a natural, clear voice.</li>
-                <li><b>Rate</b>: Speaking speed. Slightly slower (e.g., 0.9) improves single‑letter clarity.</li>
-                <li><b>Pitch</b>: High/low quality of the voice. Near 1.0 is most natural; slightly lower can help clarity.</li>
-                <li><b>Volume</b>: Loudness (1.0 is full volume).</li>
-            </ul>
-            <p class="note">Tip: After changing settings, press <b>Test voice (Sample audio)</b> to hear the result.</p>
-        </div>
-
-        <div class="setting-group">
-            <div class="setting-row">
-                <label for="voiceSelect">Voice:</label>
-                <select id="voiceSelect" aria-label="Select TTS voice">
-                    <option value="">Auto (best available)</option>
-                </select>
-            </div>
-
-            <div class="setting-row">
-                <label for="ttsRate">Rate:</label>
-                <select id="ttsRate" aria-label="TTS rate">
-                    <option value="0.8">0.8</option>
-                    <option value="0.9" selected>0.9</option>
-                    <option value="1.0">1.0</option>
-                    <option value="1.1">1.1</option>
-                </select>
-            </div>
-
-            <div class="setting-row">
-                <label for="ttsPitch">Pitch:</label>
-                <select id="ttsPitch" aria-label="TTS pitch">
-                    <option value="0.9">0.9</option>
-                    <option value="1.0" selected>1.0</option>
-                    <option value="1.1">1.1</option>
-                </select>
-            </div>
-
-            <div class="setting-row">
-                <label for="ttsVol">Volume:</label>
-                <select id="ttsVol" aria-label="TTS volume">
-                    <option value="0.8">0.8</option>
-                    <option value="1.0" selected>1.0</option>
-                </select>
-            </div>
-
-            <div class="setting-row" style="justify-content:center;">
-                <button type="button" class="testBtn" onclick="testTtsSample()">Test voice (Sample audio)</button>
-            </div>
-        </div>
-
-        <div style="text-align:center; margin-top: 12px;">
-            <button type="button" class="secondaryBtn" onclick="backToHomeFromVoice()">← Back to Home</button>
-        </div>
-    </div>
 </div>
 
 <script>
-/* ────────────────────────────────────────────────────────────────────────────
-   GLOBALS & CONSTANTS (core behavior)
-   ──────────────────────────────────────────────────────────────────────────── */
-let condition = 1, n = 2, sequence = [], index = 0, trialActive = false;
+
+/* ========================================================
+GLOBAL VARIABLES
+======================================================== */
+
+let n = 1;                // Default difficulty (1-back)
+let isi = 2500;           // Default speed
+let trials = 30;          // Short blocks reduce fatigue
+let sequence = [];
+let index = 0;
 let results = [];
-let trialStartTime = null;
-let isi = 2000, trials = 40;
-const stimDur = 600; // visual distractor duration in ms (conditions 3 & 4)
+let trialActive = false;
+let sessionStartTime = 0;
+let timerMode = false;
+let totalSessionAccuracy = [];
 
-let runActive = false, trialTimeoutId = null, distractorTimeoutId = null;
+/* ========================================================
+PROGRESS TRACKING SYSTEM (NEW)
+Uses localStorage to track long-term improvement
+======================================================== */
 
-const ctx = new (window.AudioContext || window.webkitAudioContext)();
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-const TONES = [300, 450, 600, 750, 900];
-const DISTRACTORS = ["▲", "■", "●", "★", "☀", "☂", "◆"];
+function loadProgress() {
+    let data = JSON.parse(localStorage.getItem("attentionProgress"));
 
-const matchBtn = document.getElementById("matchBtn");
-const nSelect = document.getElementById("nSelect");
-const isiSelect = document.getElementById("isiSelect");
-const visualBox = document.getElementById("visualStimulus");
-const fixation = document.getElementById("fixation");
-
-// Pages
-const menuEl = document.getElementById("menu");
-const taskEl = document.getElementById("task");
-const resultsEl = document.getElementById("results");
-const instructionsEl = document.getElementById("instructions");
-const voiceSettingsEl = document.getElementById("voiceSettings");
-
-// TTS controls & state
-const voiceSelect = document.getElementById('voiceSelect');
-const ttsRateSel  = document.getElementById('ttsRate');
-const ttsPitchSel = document.getElementById('ttsPitch');
-const ttsVolSel   = document.getElementById('ttsVol');
-let availableVoices = [];
-
-/* ────────────────────────────────────────────────────────────────────────────
-   CONTROLLED TARGET POLICY (evenness guardrails)
-   - targetRatioByN / overrideRatio: overall density
-   - windows: distribute targets across windows (~evenness across time)
-   - streak controls: cap long streaks; guarantee some singles; spacing between streaks
-   - long gap: at least one no-target span of length in [min,max]
-   ──────────────────────────────────────────────────────────────────────────── */
-const TARGET_POLICY = {
-  targetRatioByN: { 1: 0.30, 2: 0.40, 3: 0.30 }, // typical baseline
-  overrideRatio: null,           // e.g., 0.40 → ~12 targets in 30; null = use table above
-  windows: 3,                    // split [n..end] into W windows for distribution
-  windowTolerance: 1,            // allow ±1 deviation from computed window quota
-  minSinglesRatio: 0.55,         // ≥55% of targets must be singles
-  streakTrialRatio: 0.15,        // ≈15% of *trials* involved in streaks
-  allowLengths: [2,3],         // streak lengths allowed
-  maxByLength: { 3: 1, 2: 3 },   // cap: ≤1 three‑in‑a‑row and ≤3 two‑in‑a‑row
-  maxConsecutiveTargets: 3,      // hard cap on streak length in final layout
-  minSpacingBetweenStreaks: 6,   // aim for ≥6 non‑targets between streak groups
-  gapSpanLengthRange: [6, 8]    // at least one long gap (no targets)
-};
-
-/* ────────────────────────────────────────────────────────────────────────────
-   NAVIGATION HELPERS
-   ──────────────────────────────────────────────────────────────────────────── */
-function hideAllPages() {
-    menuEl.style.display = "none";
-    taskEl.style.display = "none";
-    resultsEl.style.display = "none";
-    instructionsEl.style.display = "none";
-    voiceSettingsEl.style.display = "none";
-}
-function showInstructions() {
-    hideAllPages();
-    fixation.classList.add("hidden");
-    instructionsEl.style.display = "block";
-}
-function backToHomeFromInstructions() {
-    hideAllPages();
-    menuEl.style.display = "block";
-    fixation.classList.add("hidden");
-}
-function showVoiceSettings() {
-    hideAllPages();
-    fixation.classList.add("hidden");
-    if (!availableVoices.length) populateVoices();
-    voiceSettingsEl.style.display = "block";
-}
-function backToHomeFromVoice() {
-    hideAllPages();
-    menuEl.style.display = "block";
-    fixation.classList.add("hidden");
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   PERSISTENCE (localStorage) for TTS settings
-   ──────────────────────────────────────────────────────────────────────────── */
-const TTS_STORAGE_KEY = 'ttsSettings_v1';
-function saveTtsSettings() {
-    try {
-        const data = {
-            voiceName: voiceSelect.value || '',
-            rate: String(ttsRateSel.value || ''),
-            pitch: String(ttsPitchSel.value || ''),
-            volume: String(ttsVolSel.value || '')
+    if (!data) {
+        data = {
+            sessions: 0,
+            bestLevel: 1,
+            accuracyHistory: []
         };
-        localStorage.setItem(TTS_STORAGE_KEY, JSON.stringify(data));
-    } catch (e) { console.warn('Could not save TTS settings:', e); }
+    }
+
+    return data;
 }
-function loadTtsSettings() {
-    try {
-        const raw = localStorage.getItem(TTS_STORAGE_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (data && typeof data === 'object') {
-            if (data.rate)  ttsRateSel.value  = String(data.rate);
-            if (data.pitch) ttsPitchSel.value = String(data.pitch);
-            if (data.volume)ttsVolSel.value   = String(data.volume);
-            if (typeof data.voiceName === 'string') voiceSelect.dataset.desiredVoice = data.voiceName;
+
+function saveProgress(level, accuracy) {
+    let data = loadProgress();
+
+    data.sessions += 1;
+    data.bestLevel = Math.max(data.bestLevel, level);
+    data.accuracyHistory.push(accuracy);
+
+    localStorage.setItem("attentionProgress", JSON.stringify(data));
+}
+
+function displayProgress() {
+    let data = loadProgress();
+
+    let avg = 0;
+    if (data.accuracyHistory.length > 0) {
+        avg = Math.round(
+            data.accuracyHistory.reduce((a,b)=>a+b,0) /
+            data.accuracyHistory.length
+        );
+    }
+
+    document.getElementById("progressSummary").innerHTML = `
+        <h2>Your Progress</h2>
+        Sessions Completed: ${data.sessions}<br>
+        Best Level Reached: ${data.bestLevel}-back<br>
+        Average Accuracy: ${avg}%<br><br>
+    `;
+}
+
+displayProgress();
+
+/* ========================================================
+SEQUENCE BUILDER (~30% targets, max 2 in row)
+======================================================== */
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+function buildSequence(trials, n) {
+
+    let seq = [];
+    let targetIndices = new Set();
+    let validSlots = trials - n;
+    let desiredTargets = Math.round(validSlots * 0.30);
+
+    while (targetIndices.size < desiredTargets) {
+        let pos = Math.floor(Math.random() * validSlots) + n;
+        if (targetIndices.has(pos-1) && targetIndices.has(pos-2)) continue;
+        targetIndices.add(pos);
+    }
+
+    for (let i = 0; i < trials; i++) {
+        if (i < n) {
+            seq.push(randomLetter());
+        } else if (targetIndices.has(i)) {
+            seq.push(seq[i-n]);
+        } else {
+            let options = LETTERS.filter(x => x !== seq[i-n]);
+            seq.push(options[Math.floor(Math.random() * options.length)]);
         }
-    } catch (e) { console.warn('Could not load TTS settings:', e); }
-}
-loadTtsSettings();
-[voiceSelect, ttsRateSel, ttsPitchSel, ttsVolSel].forEach(el => el.addEventListener('change', saveTtsSettings));
-
-/* ────────────────────────────────────────────────────────────────────────────
-   TTS VOICES
-   ──────────────────────────────────────────────────────────────────────────── */
-function populateVoices() {
-    availableVoices = window.speechSynthesis.getVoices() || [];
-    voiceSelect.innerHTML = '<option value="">Auto (best available)</option>';
-    availableVoices.forEach(v => {
-        const opt = document.createElement('option');
-        opt.value = v.name;
-        opt.textContent = `${v.name} — ${v.lang}`;
-        voiceSelect.appendChild(opt);
-    });
-    const desired = voiceSelect.dataset.desiredVoice;
-    if (desired) {
-        const foundDesired = availableVoices.find(v => v.name === desired);
-        if (foundDesired) { voiceSelect.value = foundDesired.name; delete voiceSelect.dataset.desiredVoice; return; }
     }
-    const preferredNames = [
-        'Microsoft Aria Online (Natural) - English (United States)',
-        'Microsoft Jenny Online (Natural) - English (United States)',
-        'Microsoft Guy Online (Natural) - English (United States)',
-        'Microsoft Samantha Online (Natural) - English (United States)',
-        'Samantha','Ava','Alex',
-        'Google US English','Google UK English Female','Google UK English Male'
-    ];
-    for (const name of preferredNames) {
-        const found = availableVoices.find(v => v.name === name);
-        if (found) { voiceSelect.value = found.name; return; }
-    }
-    if (!voiceSelect.value) {
-        const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en'));
-        if (en) voiceSelect.value = en.name;
-    }
-}
-window.speechSynthesis.onvoiceschanged = populateVoices;
-populateVoices();
 
-/* ────────────────────────────────────────────────────────────────────────────
-   TTS SAMPLE TEST (on Voice Settings page)
-   ──────────────────────────────────────────────────────────────────────────── */
-function testTtsSample() {
-    const utter = new SpeechSynthesisUtterance('Sample audio');
-    const rate  = parseFloat(ttsRateSel.value || '0.9');
-    const pitch = parseFloat(ttsPitchSel.value || '1.0');
-    const vol   = parseFloat(ttsVolSel.value   || '1.0');
-    utter.rate   = isNaN(rate)  ? 0.9 : rate;
-    utter.pitch  = isNaN(pitch) ? 1.0 : pitch;
-    utter.volume = isNaN(vol)   ? 1.0 : vol;
-    const chosen = availableVoices.find(v => v.name === voiceSelect.value);
-    if (chosen) { utter.voice = chosen; if (chosen.lang) utter.lang = chosen.lang; }
-    else { const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en')); if (en) { utter.voice = en; if (en.lang) utter.lang = en.lang; } }
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
+    return seq;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   MATCH BUTTON FEEDBACK & KEYBOARD (scoped)
-   ──────────────────────────────────────────────────────────────────────────── */
-function flashMatchButton() {
-    matchBtn.classList.add("flash");
-    setTimeout(() => matchBtn.classList.remove("flash"), 120);
+function randomLetter() {
+    return LETTERS[Math.floor(Math.random() * LETTERS.length)];
 }
-matchBtn.addEventListener("click", () => { flashMatchButton(); registerResponse(); });
-matchBtn.addEventListener("keydown", (e) => {
-    if (e.code === "Space" || e.code === "Enter") { e.preventDefault(); flashMatchButton(); registerResponse(); }
-});
 
-/* ────────────────────────────────────────────────────────────────────────────
-   START EXPERIMENT
-   - Uses the controlled sequence generator below.
-   ──────────────────────────────────────────────────────────────────────────── */
-function startExperiment(cond) {
-    if (!availableVoices.length) { populateVoices(); setTimeout(()=>{},0); }
+/* ========================================================
+START TRAINING
+======================================================== */
 
-    n = parseInt(nSelect.value, 10); if (isNaN(n) || n < 1) n = 1;
-    isi = parseInt(isiSelect.value, 10); if (isNaN(isi) || isi < 500) isi = 500;
+function startExperiment() {
 
-    document.getElementById("nLevel").textContent = n;
-    document.getElementById("isiLabel").textContent = isi;
+    timerMode = document.getElementById("timerMode").checked;
+    sessionStartTime = Date.now();
+    totalSessionAccuracy = [];
 
-    condition = cond;
-    hideAllPages();
-    taskEl.style.display = "block";
+    document.getElementById("menu").style.display = "none";
+    document.getElementById("task").style.display = "block";
 
-    document.getElementById("conditionLabel").textContent =
-        "Condition " + cond + (cond <= 2 ? "" : " (with visual distractor)");
+    runBlock();
+}
 
-    trials = 40; // change if you want longer blocks
+/* ========================================================
+RUN ONE BLOCK (Adaptive happens between blocks)
+======================================================== */
 
-    const pool = (condition === 1 || condition === 3) ? LETTERS : TONES;
+function runBlock() {
 
-    // *** Controlled sequence generation (evenness edition) ***
-    sequence = buildControlledSequence(trials, n, pool, TARGET_POLICY);
+    document.getElementById("levelLabel").textContent =
+        "Level: " + n + "-back";
 
-    // Reset run state
+    sequence = buildSequence(trials, n);
     index = 0;
     results = [];
-    runActive = true;
-    trialActive = false;
-    clearTimeout(trialTimeoutId);
-    clearTimeout(distractorTimeoutId);
-    window.speechSynthesis.cancel();
-
-    fixation.classList.remove("hidden");
-    visualBox.style.visibility = "hidden";
-    visualBox.textContent = "";
 
     nextTrial();
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   AUDIO HELPERS
-   ──────────────────────────────────────────────────────────────────────────── */
-function playTone(freq) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const now = ctx.currentTime;
+/* ========================================================
+TRIAL LOOP
+======================================================== */
 
-    osc.frequency.value = freq;
-
-    // Fade in/out to avoid clicks
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.22, now + 0.02);
-    gain.gain.linearRampToValueAtTime(0.22, now + 0.35);
-    gain.gain.linearRampToValueAtTime(0, now + 0.4);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.42);
-}
-function speakLetter(letter) {
-    const utter = new SpeechSynthesisUtterance(letter);
-    const rate  = parseFloat(ttsRateSel.value || '0.9');
-    const pitch = parseFloat(ttsPitchSel.value || '1.0');
-    const vol   = parseFloat(ttsVolSel.value   || '1.0');
-    utter.rate   = isNaN(rate)  ? 0.9 : rate;
-    utter.pitch  = isNaN(pitch) ? 1.0 : pitch;
-    utter.volume = isNaN(vol)   ? 1.0 : vol;
-    const chosen = availableVoices.find(v => v.name === voiceSelect.value);
-    if (chosen) { utter.voice = chosen; if (chosen.lang) utter.lang = chosen.lang; }
-    else { const en = availableVoices.find(v => (v.lang || '').toLowerCase().startsWith('en')); if (en) { utter.voice = en; if (en.lang) utter.lang = en.lang; } }
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utter);
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   BACK TO MENU (during a run)
-   ──────────────────────────────────────────────────────────────────────────── */
-function backToMenu() {
-    runActive = false; trialActive = false;
-    clearTimeout(trialTimeoutId); clearTimeout(distractorTimeoutId);
-    window.speechSynthesis.cancel();
-
-    hideAllPages();
-    menuEl.style.display = "block";
-
-    fixation.classList.add("hidden");
-    visualBox.style.visibility = "hidden";
-    visualBox.textContent = "";
-}
-
-/* ────────────────────────────────────────────────────────────────────────────
-   TRIAL LOOP & INPUT
-   ──────────────────────────────────────────────────────────────────────────── */
 function nextTrial() {
-    if (!runActive) return;
-    if (index >= sequence.length) { endExperiment(); return; }
 
-    trialActive = true;
-    const stim = sequence[index];
-
-    // Visual distractor (Cond 3/4): hide fixation briefly and show symbol
-    if (condition === 3 || condition === 4) {
-        fixation.classList.add("hidden");
-        visualBox.textContent = DISTRACTORS[Math.floor(Math.random() * DISTRACTORS.length)];
-        visualBox.style.visibility = "visible";
-        clearTimeout(distractorTimeoutId);
-        distractorTimeoutId = setTimeout(() => {
-            visualBox.style.visibility = "hidden";
-            visualBox.textContent = "";
-            fixation.classList.remove("hidden");
-        }, stimDur);
-    } else {
-        fixation.classList.remove("hidden");
-        visualBox.style.visibility = "hidden";
-        visualBox.textContent = "";
+    if (index >= sequence.length) {
+        endBlock();
+        return;
     }
 
-    // Present auditory stimulus
-    if (condition === 1 || condition === 3) speakLetter(stim);
-    else playTone(stim);
+    trialActive = true;
 
-    // Record trial state
-    const isTarget = (index >= n && stim === sequence[index - n]);
-    results.push({ stimulus: stim, target: isTarget, responded: false, rt: null });
+    let letter = sequence[index];
+    speak(letter);
 
-    // Start RT timer
-    trialStartTime = performance.now();
+    results.push({
+        target: (index >= n && letter === sequence[index-n]),
+        responded: false
+    });
 
-    // Advance after ISI
-    clearTimeout(trialTimeoutId);
-    trialTimeoutId = setTimeout(() => {
-        if (!runActive) return;
-        index++;
+    setTimeout(() => {
         trialActive = false;
+        index++;
         nextTrial();
     }, isi);
 }
-function registerResponse() {
-    if (!trialActive || !runActive) return;
-    if (index < 0 || index >= results.length) return;
-    const r = results[index];
-    if (!r || r.responded) return;
-    r.responded = true;
-    r.rt = performance.now() - (trialStartTime ?? performance.now());
+
+function speak(letter) {
+    const utter = new SpeechSynthesisUtterance(letter);
+    utter.rate = 0.9;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   END EXPERIMENT
-   ──────────────────────────────────────────────────────────────────────────── */
-function endExperiment() {
-    if (!runActive) return;
-    runActive = false;
+document.getElementById("matchBtn").addEventListener("click", () => {
+    if (!trialActive) return;
+    results[index].responded = true;
+});
 
-    hideAllPages();
-    resultsEl.style.display = "block";
+/* ========================================================
+END BLOCK + ADAPTIVE DIFFICULTY (NEW)
+======================================================== */
 
-    let hits = 0, misses = 0, falseAlarms = 0;
+function endBlock() {
+
+    let hits = 0;
+    let totalTargets = 0;
+
     results.forEach(r => {
-        if (r.target && r.responded) hits++;
-        if (r.target && !r.responded) misses++;
-        if (!r.target && r.responded) falseAlarms++;
+        if (r.target) {
+            totalTargets++;
+            if (r.responded) hits++;
+        }
     });
-    const rts = results.filter(r => r.responded && typeof r.rt === "number").map(r => r.rt);
-    const meanRT = rts.length ? Math.round(rts.reduce((a,b)=>a+b,0)/rts.length) : "—";
 
-    resultsEl.innerHTML = `
-        <h3>Results</h3>
-        <p><b>N‑back:</b> ${n}</p>
-        <p><b>ISI:</b> ${isi} ms</p>
-        <p><b>Trials:</b> ${sequence.length}</p>
-        <p><b>Hits:</b> ${hits}</p>
-        <p><b>Misses:</b> ${misses}</p>
-        <p><b>False Alarms:</b> ${falseAlarms}</p>
-        <p><b>Mean Reaction Time:</b> ${meanRT} ms</p>
-        <button onclick="location.reload()">Restart</button>
-        <button onclick="backToMenu()">Back to Menu</button>
+    let accuracy = totalTargets === 0 ? 0 :
+        Math.round((hits / totalTargets) * 100);
+
+    totalSessionAccuracy.push(accuracy);
+
+    /* ===============================
+    ADAPTIVE LOGIC
+    - >=85% → increase level
+    - <60% → decrease level (not below 1)
+    - Speed slightly increases with level
+    =============================== */
+
+    if (accuracy >= 85) {
+        n++;
+        isi = Math.max(1500, isi - 200);
+    } else if (accuracy < 60 && n > 1) {
+        n--;
+        isi += 200;
+    }
+
+    /* ===============================
+    TIMER MODE CONTROL (NEW)
+    If 15 minutes elapsed, end session
+    =============================== */
+
+    if (timerMode && Date.now() - sessionStartTime < 900000) {
+        runBlock(); // continue automatically
+    } else {
+        endSession();
+    }
+}
+
+/* ========================================================
+END SESSION + SAVE PROGRESS
+======================================================== */
+
+function endSession() {
+
+    document.getElementById("task").style.display = "none";
+    let resultsDiv = document.getElementById("results");
+    resultsDiv.style.display = "block";
+
+    let avgAccuracy = Math.round(
+        totalSessionAccuracy.reduce((a,b)=>a+b,0) /
+        totalSessionAccuracy.length
+    );
+
+    saveProgress(n, avgAccuracy);
+
+    let message =
+        avgAccuracy >= 85 ? "Excellent focus today!" :
+        avgAccuracy >= 70 ? "Nice steady progress!" :
+        "Keep practicing — attention improves with training.";
+
+    resultsDiv.innerHTML = `
+        <h2>Session Complete</h2>
+        Average Accuracy: ${avgAccuracy}%<br>
+        Final Level Reached: ${n}-back<br>
+        <div class="encouragement">${message}</div>
+        <button onclick="location.reload()">Train Again</button>
     `;
 }
 
-/* ────────────────────────────────────────────────────────────────────────────
-   *** CONTROLLED SEQUENCE ENGINE (EVENNESS EDITION) ***
-   See header comments for design goals and constraints.
-   ──────────────────────────────────────────────────────────────────────────── */
-function buildControlledSequence(trials, n, pool, policy) {
-  const randInt = (a,b) => Math.floor(Math.random()*(b-a+1))+a; // inclusive
-  const pick = (arr) => arr[Math.floor(Math.random()*arr.length)];
-  const shuffle = (arr) => arr.sort(()=>Math.random()-0.5);
-  const notEqFromPool = (pool, forbid) => {
-    const cands = pool.filter(x => x !== forbid);
-    return pick(cands.length ? cands : pool);
-  };
-
-  if (trials <= 0) return [];
-  if (n < 0) n = 0;
-  const validStart = Math.min(n, trials);
-  const validEnd   = trials - 1;
-  const validCount = Math.max(0, trials - n);
-
-  const baseRatio = (policy.overrideRatio != null)
-    ? policy.overrideRatio
-    : (policy.targetRatioByN[n] ?? 0.30);
-  let desiredTargets = Math.round(baseRatio * trials);
-  desiredTargets = Math.min(desiredTargets, validCount);
-  if (desiredTargets === 0 && validCount > 0) desiredTargets = 1;
-
-  // Long no‑target gap
-  const [gapMin, gapMax] = policy.gapSpanLengthRange || [8,10];
-  const gapLen = Math.min(randInt(gapMin, gapMax), validCount);
-  const gapStart = (validCount > gapLen) ? (validStart + randInt(0, validCount - gapLen)) : validStart;
-  const gapIndices = new Set();
-  for (let i = gapStart; i < gapStart + gapLen; i++) gapIndices.add(i);
-
-  // Windowing (spread targets)
-  const W = Math.max(1, policy.windows || 1);
-  const winBounds = [];
-  const span = validEnd - validStart + 1;
-  for (let w=0; w<W; w++) {
-    const s = validStart + Math.floor(w*span/W);
-    const e = validStart + Math.floor((w+1)*span/W) - 1;
-    winBounds.push([s, e]);
-  }
-  const winSlots = winBounds.map(([s,e]) => {
-    let nSlots = 0;
-    for (let i=s;i<=e;i++) if (!gapIndices.has(i)) nSlots++;
-    return nSlots;
-  });
-  const totalFreeSlots = winSlots.reduce((a,b)=>a+b,0);
-  let winTarget = winSlots.map(ns => Math.round((ns/Math.max(1,totalFreeSlots))*desiredTargets));
-  let diff = desiredTargets - winTarget.reduce((a,b)=>a+b,0);
-  while (diff !== 0) {
-    const idx = (diff>0)
-      ? winSlots.indexOf(Math.max(...winSlots))
-      : winTarget.indexOf(Math.max(...winTarget));
-    if (idx === -1) break;
-    winTarget[idx] += (diff>0 ? 1 : -1);
-    diff = desiredTargets - winTarget.reduce((a,b)=>a+b,0);
-  }
-  const tol = Math.max(0, policy.windowTolerance ?? 0);
-
-  // Streak composition
-  const minSingles = Math.ceil((policy.minSinglesRatio ?? 0.35) * desiredTargets);
-  let streakBudget = Math.min(
-    Math.max(0, Math.round((policy.streakTrialRatio ?? 0.15) * trials)),
-    desiredTargets - minSingles
-  );
-  const allowL = (policy.allowLengths || [2,3,4]).slice().sort((a,b)=>b-a);
-  const maxByL = policy.maxByLength || {4:1,3:2};
-  const streaks = [];
-  for (const L of allowL) {
-    const cap = Math.max(0, maxByL[L] ?? Infinity);
-    for (let k=0; k<cap && streakBudget >= L; k++) {
-      streaks.push(L);
-      streakBudget -= L;
-    }
-  }
-  while (streakBudget >= 2) { streaks.push(2); streakBudget -= 2; }
-
-  const streakTargetCount = streaks.reduce((a,b)=>a+b,0);
-  let singlesCount = Math.max(0, desiredTargets - streakTargetCount);
-  while (singlesCount < minSingles && streaks.length) {
-    const L = streaks.pop();
-    singlesCount += L;
-  }
-
-  const chosen = new Set();
-  const maxLenCap = Math.max(1, policy.maxConsecutiveTargets || 4);
-
-  function canPlaceStreak(idx, L, wIdx) {
-    const [ws, we] = winBounds[wIdx];
-    for (let k=0;k<L;k++) {
-      const pos = idx + k;
-      if (pos < ws || pos > we) return false;
-      if (gapIndices.has(pos)) return false;
-      if (chosen.has(pos)) return false;
-      if (pos < validStart) return false;
-    }
-    const pad = Math.max(0, policy.minSpacingBetweenStreaks ?? 0);
-    for (let p = idx - pad; p <= idx + L - 1 + pad; p++) {
-      if (p < ws || p > we) continue;
-      if (p >= idx && p <= idx+L-1) continue;
-      if (chosen.has(p)) return false;
-    }
-    return true;
-  }
-
-  const winRemain = winTarget.slice();
-  const streaksShuffled = shuffle(streaks.slice());
-  for (let sIdx=0; sIdx<streaksShuffled.length; sIdx++) {
-    const L = Math.min(streaksShuffled[sIdx], maxLenCap);
-    let placed = false;
-    for (let pass=0; pass<2 && !placed; pass++) {
-      for (let w=0; w<winBounds.length && !placed; w++) {
-        const [ws, we] = winBounds[w];
-        if (winRemain[w] < Math.max(0, L - tol)) continue;
-        const candidates = [];
-        for (let start = ws; start <= we - L + 1; start++) {
-          let ok = true;
-          for (let k=0;k<L;k++) {
-            const pos = start+k;
-            if (gapIndices.has(pos) || pos < validStart) { ok=false; break; }
-          }
-          if (ok) candidates.push(start);
-        }
-        shuffle(candidates);
-        for (const start of candidates) {
-          if (!canPlaceStreak(start, L, w)) continue;
-          for (let k=0;k<L;k++) chosen.add(start+k);
-          winRemain[w] = Math.max(0, winRemain[w] - L);
-          placed = true;
-          break;
-        }
-      }
-    }
-    if (!placed) {
-      outer:
-      for (let w=0; w<winBounds.length; w++) {
-        const [ws,we] = winBounds[w];
-        for (let start = ws; start <= we - L + 1; start++) {
-          let ok = true;
-          for (let k=0;k<L;k++) {
-            const pos = start+k;
-            if (gapIndices.has(pos) || chosen.has(pos) || pos < validStart) { ok=false; break; }
-          }
-          if (ok) {
-            for (let k=0;k<L;k++) chosen.add(start+k);
-            winRemain[w] = Math.max(0, winRemain[w] - L);
-            placed = true;
-            break outer;
-          }
-        }
-      }
-    }
-    if (!placed) singlesCount += L;
-  }
-
-// Debug: inspect a generated sequence in the console
-function debugPrintBlock(seq, n, policy) {
-  // Build a target mask and a readable line
-  const isT = seq.map((_, i) => (i >= n && seq[i] === seq[i - n]));
-  const line = isT.map(b => (b ? 'T' : '·')).join('');
-
-  // Count totals and streaks
-  let totalT = 0, longestTStreak = 0, curT = 0;
-  let totalGap = 0, longestGap = 0, curGap = 0;
-  const streakHist = {}; // length -> count
-  for (let i = 0; i < isT.length; i++) {
-    if (isT[i]) {
-      totalT++; curT++; longestTStreak = Math.max(longestTStreak, curT);
-      if (curGap > 0) { longestGap = Math.max(longestGap, curGap); curGap = 0; }
-    } else {
-      if (curT > 0) { streakHist[curT] = (streakHist[curT] || 0) + 1; curT = 0; }
-      curGap++; totalGap++;
-    }
-  }
-  if (curT > 0) { streakHist[curT] = (streakHist[curT] || 0) + 1; }
-  if (curGap > 0) { longestGap = Math.max(longestGap, curGap); }
-
-  // Window counts (same partitioning as generator)
-  const validStart = Math.min(n, seq.length);
-  const validEnd = seq.length - 1;
-  const W = Math.max(1, policy.windows || 1);
-  const span = validEnd - validStart + 1;
-  const windowBounds = [];
-  for (let w = 0; w < W; w++) {
-    const s = validStart + Math.floor(w * span / W);
-    const e = validStart + Math.floor((w + 1) * span / W) - 1;
-    windowBounds.push([s, e]);
-  }
-  const perWindowT = windowBounds.map(([s,e]) =>
-    isT.slice(s, e + 1).reduce((a,b) => a + (b ? 1 : 0), 0)
-  );
-
-  console.log('Pattern: ', line);
-  console.log('Targets:', totalT,
-              '| Longest T-streak:', longestTStreak,
-              '| Longest no-target gap:', longestGap);
-  console.log('Streak histogram (len:count):', streakHist);
-  console.log('Per-window target counts:', perWindowT);
-}
-
-// Example usage while testing:
-// sequence = buildControlledSequence(30, 2, LETTERS, TARGET_POLICY);
-// debugPrintBlock(sequence, 2, TARGET_POLICY);
-
-  function freeSlotsInWindow(w) {
-    const [ws,we] = winBounds[w];
-    const arr = [];
-    for (let i=ws;i<=we;i++) {
-      if (i >= validStart && !gapIndices.has(i) && !chosen.has(i)) arr.push(i);
-    }
-    return arr;
-  }
-  for (let w=0; w<winBounds.length && singlesCount>0; w++) {
-    let need = Math.max(0, winRemain[w]);
-    let pool = freeSlotsInWindow(w);
-    shuffle(pool);
-    while (need>0 && pool.length && singlesCount>0) {
-      const pos = pool.pop();
-      chosen.add(pos);
-      need--; singlesCount--;
-    }
-    winRemain[w] = Math.max(0, need);
-  }
-  if (singlesCount > 0) {
-    let allFree = [];
-    for (let w=0; w<winBounds.length; w++) allFree = allFree.concat(freeSlotsInWindow(w));
-    allFree = allFree.filter(i => !chosen.has(i));
-    shuffle(allFree);
-    while (singlesCount>0 && allFree.length) {
-      chosen.add(allFree.pop());
-      singlesCount--;
-    }
-  }
-
-  let currentTargets = chosen.size;
-  if (currentTargets < desiredTargets) {
-    const spare = [];
-    for (let i=validStart;i<=validEnd;i++) {
-      if (!gapIndices.has(i) && !chosen.has(i)) spare.push(i);
-    }
-    shuffle(spare);
-    while (currentTargets < desiredTargets && spare.length) {
-      chosen.add(spare.pop());
-      currentTargets++;
-    }
-  }
-  if (currentTargets > desiredTargets) {
-    const allChosen = Array.from(chosen).sort((a,b)=>a-b);
-    while (chosen.size > desiredTargets && allChosen.length) {
-      chosen.delete(allChosen.pop());
-    }
-  }
-
-  const seq = new Array(trials).fill(null);
-  for (let i=0; i<Math.min(n,trials); i++) seq[i] = pick(pool);
-  for (let i=n; i<trials; i++) {
-    const isTarget = chosen.has(i);
-    if (isTarget) seq[i] = seq[i - n];
-    else          seq[i] = notEqFromPool(pool, seq[i - n]);
-  }
-
-  const cap = Math.max(1, policy.maxConsecutiveTargets || 4);
-  let run = 0;
-  for (let i=validStart;i<trials;i++) {
-    const isT = (i>=n && seq[i] === seq[i-n]);
-    run = isT ? run+1 : 0;
-    if (run > cap) {
-      seq[i] = notEqFromPool(pool, seq[i - n]);
-      run = 0;
-    }
-  }
-
-  return seq;
-}
 </script>
 </body>
 </html>
