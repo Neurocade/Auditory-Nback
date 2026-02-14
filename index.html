@@ -269,8 +269,16 @@ function nextTrial() {
 }
 
 function speak(letter) {
-    const utter = new SpeechSynthesisUtterance(letter);
+
+    // Force lowercase so iOS does NOT say "capital A"
+    const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
+
+    // Senior-friendly slower rate
     utter.rate = 0.9;
+    utter.pitch = 1;
+    utter.volume = 1;
+
+    // Cancel any previous speech before speaking again
     speechSynthesis.cancel();
     speechSynthesis.speak(utter);
 }
