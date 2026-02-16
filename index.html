@@ -341,6 +341,36 @@ document.getElementById("matchBtn").addEventListener("click", () => {
 
 });
 
+    /* ========================================================
+KEYBOARD SUPPORT (NEW)
+Spacebar triggers MATCH button
+Improves accessibility and ease of use
+======================================================== */
+
+document.addEventListener("keydown", function(event) {
+
+    // Check if spacebar was pressed
+    if (event.code === "Space") {
+
+        // Prevent page from scrolling on spacebar
+        event.preventDefault();
+
+        // Only allow response if trial is active
+        if (!trialActive) return;
+
+        // Register response (same logic as button click)
+        results[index].responded = true;
+
+        // Trigger visual press feedback
+        const btn = document.getElementById("matchBtn");
+        btn.classList.add("pressed");
+
+        setTimeout(() => {
+            btn.classList.remove("pressed");
+        }, 150);
+    }
+});
+
 /* ========================================================
 END BLOCK + ADAPTIVE DIFFICULTY (NEW)
 ======================================================== */
