@@ -20,7 +20,7 @@ body {
 }
 
 #app {
-    width: 900px;
+    width: 850px;
     background: #1e1e1e;
     padding: 30px;
     border-radius: 12px;
@@ -43,12 +43,19 @@ button {
     font-size: 30px;
     background: #4caf50;
     color: black;
+    cursor: pointer;
+    border: none;
+    border-radius: 10px;
 }
 
-/* Visual press feedback */
+/* ================================
+VISUAL FEEDBACK WHEN BUTTON PRESSED
+Makes the MATCH button flash when clicked
+================================ */
+
 #matchBtn.pressed {
-    background: #2ecc71;
-    transform: scale(0.95);
+    background: #2ecc71;     /* Brighter green */
+    transform: scale(0.95);  /* Slight press-in effect */
     transition: transform 0.1s ease, background 0.1s ease;
 }
 
@@ -64,7 +71,10 @@ select {
     color: #bbb;
 }
 
-#results { display: none; font-size: 22px; }
+#results {
+    display: none;
+    font-size: 22px;
+}
 
 .encouragement {
     font-size: 26px;
@@ -72,29 +82,13 @@ select {
     color: #7CFF7C;
 }
 
-/* ========================================================
-MODAL OVERLAY (used for adaptive increase/decrease)
-======================================================== */
-
-#modalOverlay {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.75);
-    display: none;
-    justify-content: center;
-    align-items: center;
-}
-
-#modalBox {
+#instructionsBox {
     background: #222;
-    padding: 30px;
-    border-radius: 12px;
-    width: 500px;
-}
-
-#modalBox p {
+    padding: 20px;
+    border-radius: 10px;
     font-size: 22px;
+    margin-top: 20px;
+    text-align: left;
 }
 </style>
 </head>
@@ -104,44 +98,49 @@ MODAL OVERLAY (used for adaptive increase/decrease)
 
 <h1>Attention Training</h1>
 
-<!-- ================= MENU SCREEN ================= -->
-
 <div id="menu">
 
+<!-- ===============================
+PROGRESS TRACKING DISPLAY
+This loads saved data from localStorage
+================================ -->
 <div id="progressSummary"></div>
 
 <label>
 <input type="checkbox" id="timerMode">
-15-Minute Structured Session Mode
+  15-Minute Structured Session Mode
 </label>
 
 <br><br>
 
-<label>Starting Level:</label>
+<!-- ===============================
+LEVEL SELECT DROPDOWN
+Allows starting level 1–6
+================================ -->
+<label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
 <select id="levelSelect">
-<option value="1">Level 1 (1-back)</option>
-<option value="2">Level 2 (2-back)</option>
-<option value="3">Level 3 (3-back)</option>
-<option value="4">Level 4 (4-back)</option>
-<option value="5">Level 5 (5-back)</option>
-<option value="6">Level 6 (6-back)</option>
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+    <option value="6">6</option>
 </select>
 
 <br><br>
-
-<button onclick="showInstructions()">Start Training</button>
+<button id="startBtn">Start Training</button>
 
 </div>
 
-<!-- ================= INSTRUCTIONS SCREEN ================= -->
-
-<div id="instructionsScreen" style="display:none;">
-<h2>Instructions</h2>
-<div id="instructionText" style="font-size:22px; margin:20px;"></div>
-<button onclick="beginTask()">Begin Task</button>
+<!-- ===============================
+INSTRUCTIONS AREA
+Shown before task begins
+================================ -->
+<div id="instructions" style="display:none;">
+    <div id="instructionsBox"></div>
+    <br>
+    <button id="beginTaskBtn">Begin Task</button>
 </div>
-
-<!-- ================= TASK SCREEN ================= -->
 
 <div id="task" style="display:none;">
 <h2 id="levelLabel"></h2>
@@ -153,44 +152,27 @@ MODAL OVERLAY (used for adaptive increase/decrease)
 
 </div>
 
-<!-- ================= MODAL OVERLAY ================= -->
-
-<div id="modalOverlay">
-<div id="modalBox">
-<p id="modalMessage"></p>
-<div id="modalButtons"></div>
-</div>
-</div>
-
 <script>
 
 /* ========================================================
 GLOBAL VARIABLES
 ======================================================== */
 
-let n = 1;
-let isi = 2500;
-let trials = 30;
+let n = 1;                // Default difficulty (1-back)
+let isi = 2500;           // Default interstimulus interval (ms)
+let trials = 30;          // Short blocks reduce fatigue
 let sequence = [];
 let index = 0;
 let results = [];
 let trialActive = false;
-let timerMode = false;
 let sessionStartTime = 0;
+let timerMode = false;
 let totalSessionAccuracy = [];
-let lastRoundAccuracy = 0;
-const MAX_LEVEL = 6;
-
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+let lastRoundAccuracy = 0; 
 
 /* ========================================================
-UTILITY – NUMBER WORDS FOR INSTRUCTIONS
-======================================================== */
-
-const numberWords = ["one","two","three","four","five","six"];
-
-/* ========================================================
-PROGRESS TRACKING
+PROGRESS TRACKING SYSTEM
+Tracks sessions, best level, average, last round, best ever
 ======================================================== */
 
 function loadProgress() {
@@ -199,9 +181,14 @@ function loadProgress() {
         data = {
             sessions: 0,
             bestLevel: 1,
-            accuracyHistory: []
+            accuracyHistory: [],
+            bestAccuracyEver: 0,
+            lastRoundAccuracy: 0
         };
     }
+    // Backward compatibility
+    if (data.bestAccuracyEver === undefined) data.bestAccuracyEver = 0;
+    if (data.lastRoundAccuracy === undefined) data.lastRoundAccuracy = 0;
     return data;
 }
 
@@ -210,6 +197,8 @@ function saveProgress(level, accuracy) {
     data.sessions += 1;
     data.bestLevel = Math.max(data.bestLevel, level);
     data.accuracyHistory.push(accuracy);
+    data.lastRoundAccuracy = lastRoundAccuracy;
+    if (accuracy > data.bestAccuracyEver) data.bestAccuracyEver = accuracy;
     localStorage.setItem("attentionProgress", JSON.stringify(data));
 }
 
@@ -217,56 +206,38 @@ function displayProgress() {
     let data = loadProgress();
     let avg = 0;
     if (data.accuracyHistory.length > 0) {
-        avg = Math.round(
-            data.accuracyHistory.reduce((a,b)=>a+b,0) /
-            data.accuracyHistory.length
-        );
+        avg = Math.round(data.accuracyHistory.reduce((a,b)=>a+b,0) / data.accuracyHistory.length);
     }
-    document.getElementById("progressSummary").innerHTML =
-        `<h2>Your Progress</h2>
-        Sessions: ${data.sessions}<br>
-        Best Level: ${data.bestLevel}-back<br>
-        Average Accuracy: ${avg}%<br><br>`;
-}
-displayProgress();
-
-/* ========================================================
-INSTRUCTION SCREEN
-======================================================== */
-
-function showInstructions() {
-
-    n = parseInt(document.getElementById("levelSelect").value);
-
-    document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsScreen").style.display = "block";
-
-    let word = numberWords[n-1];
-
-    document.getElementById("instructionText").innerHTML = `
-    You will hear letters one at a time.<br><br>
-    Press the MATCH button if the letter you hear is the same as the one 
-    ${word} letter${n>1?"s":""} ago.<br><br>
-    You may press MATCH by clicking it with your mouse 
-    OR pressing the spacebar on your keyboard.<br><br>
-    Try to stay focused and respond only when it is a true match.
+    document.getElementById("progressSummary").innerHTML = `
+        <h2>Your Progress</h2>
+        Sessions Completed: ${data.sessions}<br>
+        Best Level Reached: ${data.bestLevel}-back<br>
+        Average Accuracy: ${avg}%<br>
+        Last Round Accuracy: ${data.lastRoundAccuracy}%<br>
+        Best Ever Accuracy: ${data.bestAccuracyEver}%<br><br>
     `;
 }
 
-function beginTask() {
-    timerMode = document.getElementById("timerMode").checked;
-    sessionStartTime = Date.now();
-    totalSessionAccuracy = [];
-
-    document.getElementById("instructionsScreen").style.display = "none";
-    document.getElementById("task").style.display = "block";
-
-    runBlock();
-}
+displayProgress();
 
 /* ========================================================
-SEQUENCE BUILDER (~30% targets)
+INSTRUCTION TEXT PER LEVEL
 ======================================================== */
+
+const instructionPhrases = {
+    1: "the one just before it",
+    2: "the one two letters ago",
+    3: "the one three letters ago",
+    4: "the one four letters ago",
+    5: "the one five letters ago",
+    6: "the one six letters ago (very challenging)"
+};
+
+/* ========================================================
+SEQUENCE BUILDER (~30% targets, max 2 in row)
+======================================================== */
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 function buildSequence(trials, n) {
 
@@ -277,6 +248,7 @@ function buildSequence(trials, n) {
 
     while (targetIndices.size < desiredTargets) {
         let pos = Math.floor(Math.random() * validSlots) + n;
+        if (targetIndices.has(pos-1) && targetIndices.has(pos-2)) continue;
         targetIndices.add(pos);
     }
 
@@ -290,6 +262,7 @@ function buildSequence(trials, n) {
             seq.push(options[Math.floor(Math.random() * options.length)]);
         }
     }
+
     return seq;
 }
 
@@ -298,7 +271,39 @@ function randomLetter() {
 }
 
 /* ========================================================
-RUN BLOCK
+START BUTTON HANDLER (SHOW INSTRUCTIONS)
+======================================================== */
+
+document.getElementById("startBtn").addEventListener("click", () => {
+    n = parseInt(document.getElementById("levelSelect").value);
+    showInstructions(n);
+});
+
+function showInstructions(level) {
+    document.getElementById("menu").style.display = "none";
+    const instrText = `
+    <strong>Instructions:</strong><br><br>
+    You will see a sequence of letters, one at a time.<br>
+    Press the MATCH button when the current letter matches ${instructionPhrases[level]}.<br>
+    You can press the MATCH button by <strong>clicking it</strong> or <strong>pressing the spacebar</strong>.<br><br>
+    Starting Level: 1 = easiest, 6 = very challenging.<br>
+    Click "Begin Task" when you are ready.
+    `;
+    document.getElementById("instructionsBox").innerHTML = instrText;
+    document.getElementById("instructions").style.display = "block";
+}
+
+document.getElementById("beginTaskBtn").addEventListener("click", () => {
+    document.getElementById("instructions").style.display = "none";
+    document.getElementById("task").style.display = "block";
+    timerMode = document.getElementById("timerMode").checked;
+    sessionStartTime = Date.now();
+    totalSessionAccuracy = [];
+    runBlock();
+});
+
+/* ========================================================
+RUN ONE BLOCK
 ======================================================== */
 
 function runBlock() {
@@ -312,6 +317,10 @@ function runBlock() {
 
     nextTrial();
 }
+
+/* ========================================================
+TRIAL LOOP
+======================================================== */
 
 function nextTrial() {
 
@@ -338,37 +347,40 @@ function nextTrial() {
 }
 
 function speak(letter) {
+
     const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
     utter.rate = 0.9;
+    utter.pitch = 1;
+    utter.volume = 1;
     speechSynthesis.cancel();
     speechSynthesis.speak(utter);
 }
 
 /* ========================================================
-MATCH BUTTON + SPACEBAR SUPPORT
+MATCH BUTTON / SPACEBAR RESPONSE
 ======================================================== */
-
-document.getElementById("matchBtn").addEventListener("click", registerResponse);
-
-document.addEventListener("keydown", function(event) {
-    if (event.code === "Space") {
-        event.preventDefault();
-        registerResponse();
-    }
-});
 
 function registerResponse() {
     if (!trialActive) return;
-
     results[index].responded = true;
 
+    // Visual feedback
     const btn = document.getElementById("matchBtn");
     btn.classList.add("pressed");
     setTimeout(() => btn.classList.remove("pressed"), 150);
 }
 
+document.getElementById("matchBtn").addEventListener("click", registerResponse);
+
+document.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+        e.preventDefault();
+        registerResponse();
+    }
+});
+
 /* ========================================================
-END BLOCK + ADAPTIVE LOGIC
+END BLOCK + ADAPTIVE DIFFICULTY
 ======================================================== */
 
 function endBlock() {
@@ -389,73 +401,49 @@ function endBlock() {
     lastRoundAccuracy = accuracy;
     totalSessionAccuracy.push(accuracy);
 
-    if (accuracy >= 85 && n < MAX_LEVEL) {
-        showIncreaseModal();
+    // Adaptive logic (max 6, min 1)
+    if (accuracy >= 85 && n < 6) {
+        if (confirm("Excellent focus! Do you want to increase the level?")) {
+            n++;
+            isi = Math.max(1500, isi - 200);
+            showLevelReminder(n);
+        }
     } else if (accuracy < 60 && n > 1) {
         n--;
-        showDecreaseModal();
-    } else {
-        continueOrEnd();
+        isi += 200;
+        showLevelReminder(n);
     }
-}
 
-/* ========================================================
-MODAL FUNCTIONS
-======================================================== */
-
-function showIncreaseModal() {
-
-    showModal(
-        "Excellent focus! Would you like to increase to Level " + (n+1) + "?",
-        [
-            {text:"Yes", action:() => { n++; closeModal(); continueOrEnd(); }},
-            {text:"No", action:() => { closeModal(); continueOrEnd(); }}
-        ]
-    );
-}
-
-function showDecreaseModal() {
-
-    showModal(
-        "We will lower the level slightly to make it comfortable.",
-        [
-            {text:"Continue", action:() => { closeModal(); continueOrEnd(); }}
-        ]
-    );
-}
-
-function showModal(message, buttons) {
-
-    document.getElementById("modalMessage").textContent = message;
-
-    let btnDiv = document.getElementById("modalButtons");
-    btnDiv.innerHTML = "";
-
-    buttons.forEach(b => {
-        let btn = document.createElement("button");
-        btn.textContent = b.text;
-        btn.onclick = b.action;
-        btnDiv.appendChild(btn);
-    });
-
-    document.getElementById("modalOverlay").style.display = "flex";
-}
-
-function closeModal() {
-    document.getElementById("modalOverlay").style.display = "none";
-}
-
-/* ========================================================
-SESSION CONTROL
-======================================================== */
-
-function continueOrEnd() {
+    // Timer mode: auto continue until 15 min
     if (timerMode && Date.now() - sessionStartTime < 900000) {
         runBlock();
     } else {
         endSession();
     }
 }
+
+/* ========================================================
+SHORT LEVEL REMINDER AFTER ADAPTIVE CHANGE
+======================================================== */
+
+function showLevelReminder(level) {
+    const instrText = `
+    <strong>Level Reminder:</strong><br><br>
+    You are now at Level ${level} — press MATCH when the current letter matches ${instructionPhrases[level]}.<br>
+    Click "Begin Task" when ready.
+    `;
+    document.getElementById("instructionsBox").innerHTML = instrText;
+    document.getElementById("instructions").style.display = "block";
+
+    document.getElementById("beginTaskBtn").onclick = () => {
+        document.getElementById("instructions").style.display = "none";
+        runBlock();
+    };
+}
+
+/* ========================================================
+END SESSION + SAVE PROGRESS
+======================================================== */
 
 function endSession() {
 
@@ -464,18 +452,24 @@ function endSession() {
     resultsDiv.style.display = "block";
 
     let avgAccuracy = Math.round(
-        totalSessionAccuracy.reduce((a,b)=>a+b,0) /
-        totalSessionAccuracy.length
+        totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length
     );
 
     saveProgress(n, avgAccuracy);
 
+    let message =
+        avgAccuracy >= 85 ? "Excellent focus today!" :
+        avgAccuracy >= 70 ? "Nice steady progress!" :
+        "Keep practicing — attention improves with training.";
+
     resultsDiv.innerHTML = `
     <h2>Session Complete</h2>
     Average Accuracy: ${avgAccuracy}%<br>
-    Final Level: ${n}-back<br><br>
+    Last Round Accuracy: ${lastRoundAccuracy}%<br>
+    Final Level Reached: ${n}-back<br>
+    <div class="encouragement">${message}</div>
     <button onclick="location.reload()">Train Again</button>
-    `;
+`;
 }
 
 </script>
