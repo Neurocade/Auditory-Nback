@@ -47,6 +47,9 @@ button {
     cursor: pointer;
     border: none;
     border-radius: 10px;
+
+    /* IMPORTANT: transition must be here */
+    transition: transform 0.1s ease, background 0.1s ease;
 }
 
 /* ================================
@@ -55,9 +58,8 @@ Makes the MATCH button flash when clicked
 ================================ */
 
 #matchBtn.pressed {
-    background: #2ecc71;     /* Brighter green */
-    transform: scale(0.95);  /* Slight press-in effect */
-    transition: transform 0.1s ease, background 0.1s ease;
+    background: #2ecc71;
+    transform: scale(0.92);
 }
 
 select {
