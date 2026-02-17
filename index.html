@@ -378,6 +378,30 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+
+/* ========================================================
+CUSTOM MODAL LOGIC (Replaces confirm popup)
+======================================================== */
+
+function showIncreaseModal(callbackYes, callbackNo) {
+
+    document.getElementById("modalMessage").textContent =
+        "Excellent focus! Do you want to increase the level?";
+
+    const modal = document.getElementById("customModal");
+    modal.style.display = "flex";
+
+    document.getElementById("modalYesBtn").onclick = function() {
+        modal.style.display = "none";
+        callbackYes();
+    };
+
+    document.getElementById("modalNoBtn").onclick = function() {
+        modal.style.display = "none";
+        callbackNo();
+    };
+}
+    
 /* ========================================================
 END BLOCK + ADAPTIVE DIFFICULTY
 ======================================================== */
@@ -401,12 +425,23 @@ function endBlock() {
     totalSessionAccuracy.push(accuracy);
 
     // Adaptive logic (max 6, min 1)
-    if (accuracy >= 85 && n < 6) {
-        if (confirm("Excellent focus! Do you want to increase the level?")) {
+   if (accuracy >= 85 && n < 6) {
+
+    showIncreaseModal(
+        // YES callback
+        function() {
             n++;
             isi = Math.max(1500, isi - 200);
             showLevelReminder(n);
+        },
+        // NO callback
+        function() {
+            // Do nothing — continue as normal
         }
+    );
+
+    return; // Pause flow until modal choice
+}
     } else if (accuracy < 60 && n > 1) {
         n--;
         isi += 200;
@@ -470,6 +505,20 @@ function endSession() {
     <button onclick="location.reload()">Train Again</button>
 `;
 }
+
+/* ===============================
+CUSTOM MODAL OVERLAY (Adaptive Increase)
+Replaces browser confirm()
+================================ */
+    
+<div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
+    <div style="background:#222; padding:30px; border-radius:12px; width:500px; text-align:center;">
+        <p id="modalMessage" style="font-size:22px;"></p>
+        <br>
+        <button id="modalYesBtn">Yes</button>
+        <button id="modalNoBtn">No</button>
+    </div>
+</div>
 
 </script>
 </body>
