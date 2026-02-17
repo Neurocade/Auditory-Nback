@@ -445,7 +445,6 @@ if (accuracy >= 85 && n < 6) {
     showIncreaseModal(
         function() {
             n++;
-            isi = Math.max(1500, isi - 200);
             showLevelReminder(n);
             continueAfterAdaptive();
         },
@@ -459,7 +458,6 @@ if (accuracy >= 85 && n < 6) {
 } else if (accuracy < 60 && n > 1) {
 
     n--;
-    isi += 200;
     showLevelReminder(n);
     return;
 }
