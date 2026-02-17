@@ -245,7 +245,7 @@ const instructionPhrases = {
     3: "the one three letters ago",
     4: "the one four letters ago",
     5: "the one five letters ago",
-    6: "the one six letters ago (very challenging)"
+    6: "the one six letters ago"
 };
 
 /* ========================================================
@@ -298,8 +298,8 @@ function showInstructions(level) {
     document.getElementById("menu").style.display = "none";
     const instrText = `
     <strong>Instructions:</strong><br><br>
-    You will see a sequence of letters, one at a time.<br>
-    Press the MATCH button when the current letter matches ${instructionPhrases[level]}.<br>
+    You will hear a sequence of letters, one at a time.<br>
+    Listen carefully and press the MATCH button when the current letter matches ${instructionPhrases[level]}.<br>
     You can press the MATCH button by <strong>clicking it</strong> or <strong>pressing the spacebar</strong>.<br><br>
     Click "Begin Task" when you are ready.
     `;
