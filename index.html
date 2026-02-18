@@ -118,14 +118,6 @@ select {
 <div id="progressSummary"></div>
 
 <div class="settings-group">
-    <h3>Voice Settings</h3>
-    <p style="font-size: 16px; color: #bbb;">Select a voice (Prefer "en-US" for American accent):</p>
-    <select id="voiceSelect"><option>Loading voices...</option></select>
-    <br>
-    <button id="testVoiceBtn">Test Selected Voice</button>
-</div>
-
-<div class="settings-group">
     <label>
     <input type="checkbox" id="timerMode">
       15-Minute Structured Session Mode
@@ -193,34 +185,24 @@ let timerMode = false;
 let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
 
-/* [NEW] SPEECH ENGINE SYSTEM 
-Handles cross-platform voice loading and keeps the Windows 
-speech engine from going to "sleep" during sessions.
+/* [NEW] SIMPLIFIED SPEECH SYSTEM 
+Removed the voice selection menu. The system now automatically
+searches for and locks onto the "Samantha" voice for consistency.
 */
-let voices = [];
-const voiceSelect = document.getElementById('voiceSelect');
+let selectedVoice = null;
 
-function populateVoiceList() {
-    voices = window.speechSynthesis.getVoices();
-    voiceSelect.innerHTML = '';
-    
-    voices.forEach((voice, i) => {
-        const option = document.createElement('option');
-        option.textContent = `${voice.name} (${voice.lang})`;
-        option.value = i;
-        
-        // Logical preference for auto-selecting clear American voices
-        if (voice.name.includes("Samantha") || voice.name.includes("Natural") || (voice.lang === "en-US" && voice.name.includes("Default"))) {
-            option.selected = true;
-        }
-        voiceSelect.appendChild(option);
-    });
+function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    // Prioritize Samantha (High quality US English)
+    selectedVoice = voices.find(v => v.name.includes("Samantha")) || 
+                    voices.find(v => v.lang === "en-US") || 
+                    voices[0];
 }
 
 if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = populateVoiceList;
+    speechSynthesis.onvoiceschanged = loadVoices;
 }
-populateVoiceList();
+loadVoices();
 
 // Keep-alive hack for Windows/Chrome to prevent speech engine timing out
 setInterval(() => {
@@ -229,14 +211,6 @@ setInterval(() => {
         window.speechSynthesis.resume();
     }
 }, 10000);
-
-document.getElementById('testVoiceBtn').addEventListener('click', () => {
-    const testUtter = new SpeechSynthesisUtterance("A, B, C, Z");
-    testUtter.voice = voices[voiceSelect.value];
-    testUtter.rate = 0.9;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(testUtter);
-});
 
 /* ========================================================
 PROGRESS TRACKING SYSTEM
@@ -405,15 +379,15 @@ function nextTrial() {
     }, isi);
 }
 
-/* [NEW] UPDATED SPEAK FUNCTION
+/* [NEW] HARD-CODED SPEAK FUNCTION
 Uses a 50ms buffer-clear delay to prevent Windows distortion 
-and applies the user-selected voice from the dropdown menu.
+and specifically uses the loaded Samantha voice.
 */
 function speak(letter) {
     window.speechSynthesis.cancel();
     setTimeout(() => {
         const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
-        utter.voice = voices[voiceSelect.value];
+        if (selectedVoice) utter.voice = selectedVoice;
         utter.rate = 0.9;
         utter.pitch = 1.0;
         utter.volume = 1.0;
