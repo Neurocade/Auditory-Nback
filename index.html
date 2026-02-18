@@ -386,13 +386,18 @@ function nextTrial() {
 function speak(letter) {
 
     const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
-    if (selectedVoice) {
+
+    // Detect Windows platform
+    const isWindows = navigator.userAgent.includes("Windows");
+
+    if (isWindows && selectedVoice) {
         utter.voice = selectedVoice;
     }
-    utter.rate = 0.85;
-    utter.pitch = 1.1;
+
+    utter.rate = 0.9;   // slightly clearer for letters
+    utter.pitch = 1;
     utter.volume = 1;
-    speechSynthesis.cancel();
+
     speechSynthesis.speak(utter);
 }
 
