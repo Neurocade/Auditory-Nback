@@ -48,14 +48,9 @@ button {
     border-radius: 10px;
 }
 
-/* ================================
-VISUAL FEEDBACK WHEN BUTTON PRESSED
-Makes the MATCH button flash when clicked
-================================ */
-
 #matchBtn.pressed {
-    background: #2ecc71;     /* Brighter green */
-    transform: scale(0.95);  /* Slight press-in effect */
+    background: #2ecc71;
+    transform: scale(0.95);
     transition: transform 0.1s ease, background 0.1s ease;
 }
 
@@ -99,43 +94,25 @@ select {
 <h1>Attention Training</h1>
 
 <div id="menu">
-
-<!-- ===============================
-PROGRESS TRACKING DISPLAY
-This loads saved data from localStorage
-================================ -->
-<div id="progressSummary"></div>
-
-<label>
-<input type="checkbox" id="timerMode">
-  15-Minute Structured Session Mode
-</label>
-
-<br><br>
-
-<!-- ===============================
-LEVEL SELECT DROPDOWN
-Allows starting level 1–6
-================================ -->
-<label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
-<select id="levelSelect">
-    <option value="1">1</option>
-    <option value="2">2</option>
-    <option value="3">3</option>
-    <option value="4">4</option>
-    <option value="5">5</option>
-    <option value="6">6</option>
-</select>
-
-<br><br>
-<button id="startBtn">Start Training</button>
-
+    <div id="progressSummary"></div>
+    <label>
+    <input type="checkbox" id="timerMode">
+      15-Minute Structured Session Mode
+    </label>
+    <br><br>
+    <label for="levelSelect">Select Starting Level (1-6): </label>
+    <select id="levelSelect">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+    </select>
+    <br><br>
+    <button id="startBtn">Start Training</button>
 </div>
 
-<!-- ===============================
-INSTRUCTIONS AREA
-Shown before task begins
-================================ -->
 <div id="instructions" style="display:none;">
     <div id="instructionsBox"></div>
     <br>
@@ -143,40 +120,34 @@ Shown before task begins
 </div>
 
 <div id="task" style="display:none;">
-<h2 id="levelLabel"></h2>
-<div id="fixation">+</div>
-<button id="matchBtn">MATCH</button>
+    <h2 id="levelLabel"></h2>
+    <div id="fixation">+</div>
+    <button id="matchBtn">MATCH</button>
 </div>
 
 <div id="results"></div>
 
 </div>
 
-    <!-- ===============================
-CUSTOM MODAL OVERLAY (Adaptive Increase)
-Replaces browser confirm()
-================================ -->
-    
-<div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center;">
+<div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:1000;">
     <div style="background:#222; padding:30px; border-radius:12px; width:500px; text-align:center;">
         <p id="modalMessage" style="font-size:22px;"></p>
         <br>
         <button id="modalYesBtn">Yes</button>
         <button id="modalNoBtn">No</button>
-
     </div>
 </div>
     
 <script>
 
 /* ========================================================
-GLOBAL VARIABLES
+GLOBAL VARIABLES & SPEECH ENGINE FIXES
 ======================================================== */
 
-let trialTimeout = null;  //     
-let n = 1;                // Default difficulty (1-back)
-let isi = 2500;           // Default interstimulus interval (ms)
-let trials = 30;          // Short blocks reduce fatigue
+let trialTimeout = null;  
+let n = 1;                
+let isi = 2500;           
+let trials = 30;          
 let sequence = [];
 let index = 0;
 let results = [];
@@ -185,27 +156,61 @@ let sessionStartTime = 0;
 let timerMode = false;
 let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
-
 let selectedVoice = null;
 
-function loadVoices() {
-    const voices = speechSynthesis.getVoices();
+// Fix for Windows: Keep the speech engine "awake"
+setInterval(() => {
+    if (window.speechSynthesis && !window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+    }
+}, 10000);
 
-    // Prefer high-quality English voices
+function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) return;
+
+    // Prefer High Quality Windows "Natural" voices (Edge) or standard Desktop voices
     selectedVoice =
-        voices.find(v => v.name.includes("Natural")) ||
+        voices.find(v => v.name.includes("Natural") && v.lang.includes("en")) ||
         voices.find(v => v.name.includes("Zira")) ||
+        voices.find(v => v.name.includes("David")) ||
         voices.find(v => v.name.includes("Mark")) ||
-        voices.find(v => v.lang === "en-US") ||
+        voices.find(v => v.lang.startsWith("en-")) ||
         voices[0];
 }
 
-speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices(); 
+// Ensure voices load on all browsers
+window.speechSynthesis.onvoiceschanged = loadVoices;
+loadVoices(); 
+
+/* ========================================================
+SPEECH FUNCTION (UPDATED FOR WINDOWS STABILITY)
+======================================================== */
+
+function speak(letter) {
+    // 1. Clear any pending speech immediately
+    window.speechSynthesis.cancel();
+
+    // 2. Short delay before starting new speech helps Windows sound buffers reset
+    setTimeout(() => {
+        const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
+
+        if (selectedVoice) {
+            utter.voice = selectedVoice;
+        }
+
+        // Set rate to 1.0; Windows voices can distort if the rate is set too low or high
+        utter.rate = 1.0;   
+        utter.pitch = 1;
+        utter.volume = 1;
+
+        window.speechSynthesis.speak(utter);
+    }, 50); 
+}
 
 /* ========================================================
 PROGRESS TRACKING SYSTEM
-Tracks sessions, best level, average, last round, best ever
 ======================================================== */
 
 function loadProgress() {
@@ -219,9 +224,6 @@ function loadProgress() {
             lastRoundAccuracy: 0
         };
     }
-    // Backward compatibility
-    if (data.bestAccuracyEver === undefined) data.bestAccuracyEver = 0;
-    if (data.lastRoundAccuracy === undefined) data.lastRoundAccuracy = 0;
     return data;
 }
 
@@ -230,7 +232,7 @@ function saveProgress(level, accuracy) {
     data.sessions += 1;
     data.bestLevel = Math.max(data.bestLevel, level);
     data.accuracyHistory.push(accuracy);
-    data.lastRoundAccuracy = lastRoundAccuracy;
+    data.lastRoundAccuracy = accuracy;
     if (accuracy > data.bestAccuracyEver) data.bestAccuracyEver = accuracy;
     localStorage.setItem("attentionProgress", JSON.stringify(data));
 }
@@ -253,10 +255,6 @@ function displayProgress() {
 
 displayProgress();
 
-/* ========================================================
-INSTRUCTION TEXT PER LEVEL
-======================================================== */
-
 const instructionPhrases = {
     1: "the one just before it",
     2: "the one two letters ago",
@@ -267,13 +265,12 @@ const instructionPhrases = {
 };
 
 /* ========================================================
-SEQUENCE BUILDER (~30% targets, max 2 in row)
+LOGIC & TRIAL CONTROL
 ======================================================== */
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
 function buildSequence(trials, n) {
-
     let seq = [];
     let targetIndices = new Set();
     let validSlots = trials - n;
@@ -295,17 +292,12 @@ function buildSequence(trials, n) {
             seq.push(options[Math.floor(Math.random() * options.length)]);
         }
     }
-
     return seq;
 }
 
 function randomLetter() {
     return LETTERS[Math.floor(Math.random() * LETTERS.length)];
 }
-
-/* ========================================================
-START BUTTON HANDLER (SHOW INSTRUCTIONS)
-======================================================== */
 
 document.getElementById("startBtn").addEventListener("click", () => {
     n = parseInt(document.getElementById("levelSelect").value);
@@ -334,40 +326,21 @@ document.getElementById("beginTaskBtn").addEventListener("click", () => {
     runBlock();
 });
 
-/* ========================================================
-RUN ONE BLOCK
-======================================================== */
-
 function runBlock() {
-
-if (trialTimeout) {
-    clearTimeout(trialTimeout);
-    trialTimeout = null;
-}
-    
-    document.getElementById("levelLabel").textContent =
-        "Level: " + n + "-back";
-
+    if (trialTimeout) clearTimeout(trialTimeout);
+    document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
     sequence = buildSequence(trials, n);
     index = 0;
     results = [];
-
     nextTrial();
 }
 
-/* ========================================================
-TRIAL LOOP
-======================================================== */
-
 function nextTrial() {
-
     if (index >= sequence.length) {
         endBlock();
         return;
     }
-
     trialActive = true;
-
     let letter = sequence[index];
     speak(letter);
 
@@ -377,46 +350,21 @@ function nextTrial() {
     });
 
     trialTimeout = setTimeout(() => {
-    trialActive = false;
-    index++;
-    nextTrial();
-}, isi);
+        trialActive = false;
+        index++;
+        nextTrial();
+    }, isi);
 }
-
-function speak(letter) {
-
-    const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
-
-    // Detect Windows platform
-    const isWindows = navigator.userAgent.includes("Windows");
-
-    if (isWindows && selectedVoice) {
-        utter.voice = selectedVoice;
-    }
-
-    utter.rate = 0.9;   // slightly clearer for letters
-    utter.pitch = 1;
-    utter.volume = 1;
-
-    speechSynthesis.speak(utter);
-}
-
-/* ========================================================
-MATCH BUTTON / SPACEBAR RESPONSE
-======================================================== */
 
 function registerResponse() {
     if (!trialActive) return;
     results[index].responded = true;
-
-    // Visual feedback
     const btn = document.getElementById("matchBtn");
     btn.classList.add("pressed");
     setTimeout(() => btn.classList.remove("pressed"), 150);
 }
 
 document.getElementById("matchBtn").addEventListener("click", registerResponse);
-
 document.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
         e.preventDefault();
@@ -424,44 +372,9 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-
-/* ========================================================
-CUSTOM MODAL LOGIC (Replaces confirm popup)
-======================================================== */
-
-function showIncreaseModal(callbackYes, callbackNo) {
-
-    document.getElementById("modalMessage").textContent =
-        "Excellent focus! Do you want to increase the level?";
-
-    const modal = document.getElementById("customModal");
-    modal.style.display = "flex";
-
-    document.getElementById("modalYesBtn").onclick = function() {
-        modal.style.display = "none";
-        callbackYes();
-    };
-
-    document.getElementById("modalNoBtn").onclick = function() {
-        modal.style.display = "none";
-        callbackNo();
-    };
-}
-    
-/* ========================================================
-END BLOCK + ADAPTIVE DIFFICULTY
-======================================================== */
-
-    function endBlock() {
-
-    if (trialTimeout) {
-        clearTimeout(trialTimeout);
-        trialTimeout = null;
-    }
-
+function endBlock() {
     let hits = 0;
     let totalTargets = 0;
-
     results.forEach(r => {
         if (r.target) {
             totalTargets++;
@@ -469,41 +382,31 @@ END BLOCK + ADAPTIVE DIFFICULTY
         }
     });
 
-    let accuracy = totalTargets === 0 ? 0 :
-        Math.round((hits / totalTargets) * 100);
-
+    let accuracy = totalTargets === 0 ? 0 : Math.round((hits / totalTargets) * 100);
     lastRoundAccuracy = accuracy;
     totalSessionAccuracy.push(accuracy);
 
-// Adaptive logic (max 6, min 1)
-if (accuracy >= 85 && n < 6) {
-
-    showIncreaseModal(
-        function() {
-            n++;
-            showLevelReminder(n);
-            continueAfterAdaptive();
-        },
-        function() {
-            continueAfterAdaptive();
-        }
-    );
-
-    return; // Pause flow until modal choice
-
-} else if (accuracy < 60 && n > 1) {
-
-    n--;
-    showLevelReminder(n);
-    return;
+    if (accuracy >= 85 && n < 6) {
+        showIncreaseModal(
+            () => { n++; showLevelReminder(n); },
+            () => { continueAfterAdaptive(); }
+        );
+        return;
+    } else if (accuracy < 60 && n > 1) {
+        n--;
+        showLevelReminder(n);
+        return;
+    }
+    continueAfterAdaptive();
 }
 
-continueAfterAdaptive();
+function showIncreaseModal(callbackYes, callbackNo) {
+    document.getElementById("modalMessage").textContent = "Excellent focus! Do you want to increase the level?";
+    const modal = document.getElementById("customModal");
+    modal.style.display = "flex";
+    document.getElementById("modalYesBtn").onclick = () => { modal.style.display = "none"; callbackYes(); };
+    document.getElementById("modalNoBtn").onclick = () => { modal.style.display = "none"; callbackNo(); };
 }
-
-/* ========================================================
-SHORT LEVEL REMINDER AFTER ADAPTIVE CHANGE
-======================================================== */
 
 function showLevelReminder(level) {
     const instrText = `
@@ -513,47 +416,13 @@ function showLevelReminder(level) {
     `;
     document.getElementById("instructionsBox").innerHTML = instrText;
     document.getElementById("instructions").style.display = "block";
-
     document.getElementById("beginTaskBtn").onclick = () => {
         document.getElementById("instructions").style.display = "none";
         runBlock();
     };
 }
 
-/* ========================================================
-END SESSION + SAVE PROGRESS
-======================================================== */
-
-function endSession() {
-
-    document.getElementById("task").style.display = "none";
-    let resultsDiv = document.getElementById("results");
-    resultsDiv.style.display = "block";
-
-    let avgAccuracy = Math.round(
-        totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length
-    );
-
-    saveProgress(n, avgAccuracy);
-
-    let message =
-        avgAccuracy >= 85 ? "Excellent focus today!" :
-        avgAccuracy >= 70 ? "Nice steady progress!" :
-        "Keep practicing — attention improves with training.";
-
-    resultsDiv.innerHTML = `
-    <h2>Session Complete</h2>
-    Average Accuracy: ${avgAccuracy}%<br>
-    Last Round Accuracy: ${lastRoundAccuracy}%<br>
-    Final Level Reached: ${n}-back<br>
-    <div class="encouragement">${message}</div>
-    <button onclick="location.reload()">Train Again</button>
-`;
-}
-
-    function continueAfterAdaptive() {
-
-    // Timer mode: auto continue until 15 min
+function continueAfterAdaptive() {
     if (timerMode && Date.now() - sessionStartTime < 900000) {
         runBlock();
     } else {
@@ -561,6 +430,23 @@ function endSession() {
     }
 }
 
+function endSession() {
+    document.getElementById("task").style.display = "none";
+    let resultsDiv = document.getElementById("results");
+    resultsDiv.style.display = "block";
+    let avgAccuracy = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
+    saveProgress(n, avgAccuracy);
+
+    let message = avgAccuracy >= 85 ? "Excellent focus today!" : "Keep practicing — attention improves with training.";
+    resultsDiv.innerHTML = `
+        <h2>Session Complete</h2>
+        Average Accuracy: ${avgAccuracy}%<br>
+        Last Round Accuracy: ${lastRoundAccuracy}%<br>
+        Final Level Reached: ${n}-back<br>
+        <div class="encouragement">${message}</div>
+        <button onclick="location.reload()">Train Again</button>
+    `;
+}
 </script>
 </body>
 </html>
