@@ -173,6 +173,7 @@ Replaces browser confirm()
 GLOBAL VARIABLES
 ======================================================== */
 
+let trialTimeout = null;  //     
 let n = 1;                // Default difficulty (1-back)
 let isi = 2500;           // Default interstimulus interval (ms)
 let trials = 30;          // Short blocks reduce fatigue
@@ -322,6 +323,11 @@ RUN ONE BLOCK
 
 function runBlock() {
 
+if (trialTimeout) {
+    clearTimeout(trialTimeout);
+    trialTimeout = null;
+}
+    
     document.getElementById("levelLabel").textContent =
         "Level: " + n + "-back";
 
@@ -353,11 +359,11 @@ function nextTrial() {
         responded: false
     });
 
-    setTimeout(() => {
-        trialActive = false;
-        index++;
-        nextTrial();
-    }, isi);
+    trialTimeout = setTimeout(() => {
+    trialActive = false;
+    index++;
+    nextTrial();
+}, isi);
 }
 
 function speak(letter) {
@@ -421,7 +427,12 @@ function showIncreaseModal(callbackYes, callbackNo) {
 END BLOCK + ADAPTIVE DIFFICULTY
 ======================================================== */
 
-function endBlock() {
+    function endBlock() {
+
+    if (trialTimeout) {
+        clearTimeout(trialTimeout);
+        trialTimeout = null;
+    }
 
     let hits = 0;
     let totalTargets = 0;
