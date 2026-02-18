@@ -186,6 +186,23 @@ let timerMode = false;
 let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
 
+let selectedVoice = null;
+
+function loadVoices() {
+    const voices = speechSynthesis.getVoices();
+
+    // Prefer high-quality English voices
+    selectedVoice =
+        voices.find(v => v.name.includes("Natural")) ||
+        voices.find(v => v.name.includes("Zira")) ||
+        voices.find(v => v.name.includes("Mark")) ||
+        voices.find(v => v.lang === "en-US") ||
+        voices[0];
+}
+
+speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices(); 
+
 /* ========================================================
 PROGRESS TRACKING SYSTEM
 Tracks sessions, best level, average, last round, best ever
@@ -369,8 +386,11 @@ function nextTrial() {
 function speak(letter) {
 
     const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
-    utter.rate = 0.9;
-    utter.pitch = 1;
+    if (selectedVoice) {
+        utter.voice = selectedVoice;
+    }
+    utter.rate = 0.85;
+    utter.pitch = 1.1;
     utter.volume = 1;
     speechSynthesis.cancel();
     speechSynthesis.speak(utter);
