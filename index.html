@@ -37,7 +37,11 @@ button {
     border-radius: 10px;
     border: none;
     cursor: pointer;
+    background: #444;
+    color: white;
 }
+
+#startBtn { background: #4caf50; color: black; font-weight: bold; }
 
 #matchBtn {
     font-size: 30px;
@@ -46,11 +50,17 @@ button {
     cursor: pointer;
     border: none;
     border-radius: 10px;
+    padding: 20px 40px;
 }
 
+/* ================================
+VISUAL FEEDBACK WHEN BUTTON PRESSED
+Makes the MATCH button flash when clicked
+================================ */
+
 #matchBtn.pressed {
-    background: #2ecc71;
-    transform: scale(0.95);
+    background: #2ecc71;     /* Brighter green */
+    transform: scale(0.95);  /* Slight press-in effect */
     transition: transform 0.1s ease, background 0.1s ease;
 }
 
@@ -58,6 +68,8 @@ select {
     font-size: 20px;
     padding: 8px;
     margin: 6px;
+    background: #333;
+    color: white;
 }
 
 #fixation {
@@ -85,6 +97,14 @@ select {
     margin-top: 20px;
     text-align: left;
 }
+
+.settings-group {
+    border: 1px solid #444;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 10px;
+    background: #252525;
+}
 </style>
 </head>
 
@@ -94,13 +114,26 @@ select {
 <h1>Attention Training</h1>
 
 <div id="menu">
-    <div id="progressSummary"></div>
+
+<div id="progressSummary"></div>
+
+<div class="settings-group">
+    <h3>Voice Settings</h3>
+    <p style="font-size: 16px; color: #bbb;">Select a voice (Prefer "en-US" for American accent):</p>
+    <select id="voiceSelect"><option>Loading voices...</option></select>
+    <br>
+    <button id="testVoiceBtn">Test Selected Voice</button>
+</div>
+
+<div class="settings-group">
     <label>
     <input type="checkbox" id="timerMode">
       15-Minute Structured Session Mode
     </label>
+
     <br><br>
-    <label for="levelSelect">Select Starting Level (1-6): </label>
+
+    <label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
     <select id="levelSelect">
         <option value="1">1</option>
         <option value="2">2</option>
@@ -109,8 +142,11 @@ select {
         <option value="5">5</option>
         <option value="6">6</option>
     </select>
-    <br><br>
-    <button id="startBtn">Start Training</button>
+</div>
+
+<br><br>
+<button id="startBtn">Start Training</button>
+
 </div>
 
 <div id="instructions" style="display:none;">
@@ -120,28 +156,28 @@ select {
 </div>
 
 <div id="task" style="display:none;">
-    <h2 id="levelLabel"></h2>
-    <div id="fixation">+</div>
-    <button id="matchBtn">MATCH</button>
+<h2 id="levelLabel"></h2>
+<div id="fixation">+</div>
+<button id="matchBtn">MATCH</button>
 </div>
 
 <div id="results"></div>
 
 </div>
 
-<div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:1000;">
+    <div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); justify-content:center; align-items:center; z-index:1000;">
     <div style="background:#222; padding:30px; border-radius:12px; width:500px; text-align:center;">
         <p id="modalMessage" style="font-size:22px;"></p>
         <br>
-        <button id="modalYesBtn">Yes</button>
-        <button id="modalNoBtn">No</button>
+        <button id="modalYesBtn" style="background:#4caf50; color:black;">Yes</button>
+        <button id="modalNoBtn" style="background:#f44336; color:white;">No</button>
     </div>
 </div>
     
 <script>
 
 /* ========================================================
-GLOBAL VARIABLES & SPEECH ENGINE FIXES
+GLOBAL VARIABLES
 ======================================================== */
 
 let trialTimeout = null;  
@@ -156,9 +192,37 @@ let sessionStartTime = 0;
 let timerMode = false;
 let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
-let selectedVoice = null;
 
-// Keep-alive for Windows/Chrome speech engine
+/* [NEW] SPEECH ENGINE SYSTEM 
+Handles cross-platform voice loading and keeps the Windows 
+speech engine from going to "sleep" during sessions.
+*/
+let voices = [];
+const voiceSelect = document.getElementById('voiceSelect');
+
+function populateVoiceList() {
+    voices = window.speechSynthesis.getVoices();
+    voiceSelect.innerHTML = '';
+    
+    voices.forEach((voice, i) => {
+        const option = document.createElement('option');
+        option.textContent = `${voice.name} (${voice.lang})`;
+        option.value = i;
+        
+        // Logical preference for auto-selecting clear American voices
+        if (voice.name.includes("Samantha") || voice.name.includes("Natural") || (voice.lang === "en-US" && voice.name.includes("Default"))) {
+            option.selected = true;
+        }
+        voiceSelect.appendChild(option);
+    });
+}
+
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = populateVoiceList;
+}
+populateVoiceList();
+
+// Keep-alive hack for Windows/Chrome to prevent speech engine timing out
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
@@ -166,56 +230,17 @@ setInterval(() => {
     }
 }, 10000);
 
-function loadVoices() {
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length === 0) return;
-
-    // VOICE SELECTION LOGIC
-    // We look for specifically clear, high-quality American English voices
-    selectedVoice =
-        // 1. Apple's classic high-quality voices (iOS)
-        voices.find(v => v.name.includes("Samantha") || v.name.includes("Alex")) ||
-        // 2. Microsoft's new "Natural" voices (Windows Edge)
-        voices.find(v => v.name.includes("Natural") && v.lang.includes("en-US")) ||
-        // 3. Google's standard high-quality English (Android/Chrome)
-        voices.find(v => v.name.includes("Google US English")) ||
-        // 4. Standard Windows desktop voices
-        voices.find(v => v.name.includes("Zira") || v.name.includes("David")) ||
-        // 5. Fallback to any US English voice
-        voices.find(v => v.lang === "en-US") ||
-        voices[0];
-}
-
-window.speechSynthesis.onvoiceschanged = loadVoices;
-loadVoices(); 
-
-/* ========================================================
-SPEECH FUNCTION
-======================================================== */
-
-function speak(letter) {
-    // Stop any existing speech to prevent Windows distortion
+document.getElementById('testVoiceBtn').addEventListener('click', () => {
+    const testUtter = new SpeechSynthesisUtterance("A, B, C, Z");
+    testUtter.voice = voices[voiceSelect.value];
+    testUtter.rate = 0.9;
     window.speechSynthesis.cancel();
-
-    // Small delay ensures the previous audio process is killed before starting new one
-    setTimeout(() => {
-        const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
-
-        if (selectedVoice) {
-            utter.voice = selectedVoice;
-        }
-
-        // Standardized settings for clarity
-        utter.rate = 0.9;   // Slightly slower than normal for better letter recognition
-        utter.pitch = 1.0;
-        utter.volume = 1.0;
-
-        window.speechSynthesis.speak(utter);
-    }, 40); 
-}
+    window.speechSynthesis.speak(testUtter);
+});
 
 /* ========================================================
 PROGRESS TRACKING SYSTEM
+Tracks sessions, best level, average, last round, best ever
 ======================================================== */
 
 function loadProgress() {
@@ -260,6 +285,10 @@ function displayProgress() {
 
 displayProgress();
 
+/* ========================================================
+INSTRUCTION TEXT PER LEVEL
+======================================================== */
+
 const instructionPhrases = {
     1: "the one just before it",
     2: "the one two letters ago",
@@ -270,7 +299,7 @@ const instructionPhrases = {
 };
 
 /* ========================================================
-LOGIC & TRIAL CONTROL
+SEQUENCE BUILDER (~30% targets, max 2 in row)
 ======================================================== */
 
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -304,6 +333,10 @@ function randomLetter() {
     return LETTERS[Math.floor(Math.random() * LETTERS.length)];
 }
 
+/* ========================================================
+START BUTTON HANDLER (SHOW INSTRUCTIONS)
+======================================================== */
+
 document.getElementById("startBtn").addEventListener("click", () => {
     n = parseInt(document.getElementById("levelSelect").value);
     showInstructions(n);
@@ -331,14 +364,25 @@ document.getElementById("beginTaskBtn").addEventListener("click", () => {
     runBlock();
 });
 
+/* ========================================================
+RUN ONE BLOCK
+======================================================== */
+
 function runBlock() {
-    if (trialTimeout) clearTimeout(trialTimeout);
+    if (trialTimeout) {
+        clearTimeout(trialTimeout);
+        trialTimeout = null;
+    }
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
     sequence = buildSequence(trials, n);
     index = 0;
     results = [];
     nextTrial();
 }
+
+/* ========================================================
+TRIAL LOOP
+======================================================== */
 
 function nextTrial() {
     if (index >= sequence.length) {
@@ -361,15 +405,38 @@ function nextTrial() {
     }, isi);
 }
 
+/* [NEW] UPDATED SPEAK FUNCTION
+Uses a 50ms buffer-clear delay to prevent Windows distortion 
+and applies the user-selected voice from the dropdown menu.
+*/
+function speak(letter) {
+    window.speechSynthesis.cancel();
+    setTimeout(() => {
+        const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
+        utter.voice = voices[voiceSelect.value];
+        utter.rate = 0.9;
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
+        window.speechSynthesis.speak(utter);
+    }, 50); 
+}
+
+/* ========================================================
+MATCH BUTTON / SPACEBAR RESPONSE
+======================================================== */
+
 function registerResponse() {
     if (!trialActive) return;
     results[index].responded = true;
+
+    // Visual feedback
     const btn = document.getElementById("matchBtn");
     btn.classList.add("pressed");
     setTimeout(() => btn.classList.remove("pressed"), 150);
 }
 
 document.getElementById("matchBtn").addEventListener("click", registerResponse);
+
 document.addEventListener("keydown", (e) => {
     if (e.code === "Space") {
         e.preventDefault();
@@ -377,9 +444,39 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
+/* ========================================================
+CUSTOM MODAL LOGIC (Replaces confirm popup)
+======================================================== */
+
+function showIncreaseModal(callbackYes, callbackNo) {
+    document.getElementById("modalMessage").textContent = "Excellent focus! Do you want to increase the level?";
+    const modal = document.getElementById("customModal");
+    modal.style.display = "flex";
+
+    document.getElementById("modalYesBtn").onclick = function() {
+        modal.style.display = "none";
+        callbackYes();
+    };
+
+    document.getElementById("modalNoBtn").onclick = function() {
+        modal.style.display = "none";
+        callbackNo();
+    };
+}
+    
+/* ========================================================
+END BLOCK + ADAPTIVE DIFFICULTY
+======================================================== */
+
 function endBlock() {
+    if (trialTimeout) {
+        clearTimeout(trialTimeout);
+        trialTimeout = null;
+    }
+
     let hits = 0;
     let totalTargets = 0;
+
     results.forEach(r => {
         if (r.target) {
             totalTargets++;
@@ -391,12 +488,18 @@ function endBlock() {
     lastRoundAccuracy = accuracy;
     totalSessionAccuracy.push(accuracy);
 
+    // Adaptive logic (max 6, min 1)
     if (accuracy >= 85 && n < 6) {
         showIncreaseModal(
-            () => { n++; showLevelReminder(n); },
-            () => { continueAfterAdaptive(); }
+            function() {
+                n++;
+                showLevelReminder(n);
+            },
+            function() {
+                continueAfterAdaptive();
+            }
         );
-        return;
+        return; 
     } else if (accuracy < 60 && n > 1) {
         n--;
         showLevelReminder(n);
@@ -405,13 +508,9 @@ function endBlock() {
     continueAfterAdaptive();
 }
 
-function showIncreaseModal(callbackYes, callbackNo) {
-    document.getElementById("modalMessage").textContent = "Excellent focus! Do you want to increase the level?";
-    const modal = document.getElementById("customModal");
-    modal.style.display = "flex";
-    document.getElementById("modalYesBtn").onclick = () => { modal.style.display = "none"; callbackYes(); };
-    document.getElementById("modalNoBtn").onclick = () => { modal.style.display = "none"; callbackNo(); };
-}
+/* ========================================================
+SHORT LEVEL REMINDER AFTER ADAPTIVE CHANGE
+======================================================== */
 
 function showLevelReminder(level) {
     const instrText = `
@@ -421,13 +520,45 @@ function showLevelReminder(level) {
     `;
     document.getElementById("instructionsBox").innerHTML = instrText;
     document.getElementById("instructions").style.display = "block";
+
     document.getElementById("beginTaskBtn").onclick = () => {
         document.getElementById("instructions").style.display = "none";
         runBlock();
     };
 }
 
+/* ========================================================
+END SESSION + SAVE PROGRESS
+======================================================== */
+
+function endSession() {
+    document.getElementById("task").style.display = "none";
+    let resultsDiv = document.getElementById("results");
+    resultsDiv.style.display = "block";
+
+    let avgAccuracy = Math.round(
+        totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length
+    );
+
+    saveProgress(n, avgAccuracy);
+
+    let message =
+        avgAccuracy >= 85 ? "Excellent focus today!" :
+        avgAccuracy >= 70 ? "Nice steady progress!" :
+        "Keep practicing — attention improves with training.";
+
+    resultsDiv.innerHTML = `
+    <h2>Session Complete</h2>
+    Average Accuracy: ${avgAccuracy}%<br>
+    Last Round Accuracy: ${lastRoundAccuracy}%<br>
+    Final Level Reached: ${n}-back<br>
+    <div class="encouragement">${message}</div>
+    <button onclick="location.reload()">Train Again</button>
+`;
+}
+
 function continueAfterAdaptive() {
+    // Timer mode: auto continue until 15 min
     if (timerMode && Date.now() - sessionStartTime < 900000) {
         runBlock();
     } else {
@@ -435,23 +566,6 @@ function continueAfterAdaptive() {
     }
 }
 
-function endSession() {
-    document.getElementById("task").style.display = "none";
-    let resultsDiv = document.getElementById("results");
-    resultsDiv.style.display = "block";
-    let avgAccuracy = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
-    saveProgress(n, avgAccuracy);
-
-    let message = avgAccuracy >= 85 ? "Excellent focus today!" : "Keep practicing — attention improves with training.";
-    resultsDiv.innerHTML = `
-        <h2>Session Complete</h2>
-        Average Accuracy: ${avgAccuracy}%<br>
-        Last Round Accuracy: ${lastRoundAccuracy}%<br>
-        Final Level Reached: ${n}-back<br>
-        <div class="encouragement">${message}</div>
-        <button onclick="location.reload()">Train Again</button>
-    `;
-}
 </script>
 </body>
 </html>
