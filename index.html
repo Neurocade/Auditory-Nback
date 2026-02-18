@@ -158,7 +158,7 @@ let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
 let selectedVoice = null;
 
-// Fix for Windows: Keep the speech engine "awake"
+// Keep-alive for Windows/Chrome speech engine
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
@@ -170,29 +170,34 @@ function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
     if (voices.length === 0) return;
 
-    // Prefer High Quality Windows "Natural" voices (Edge) or standard Desktop voices
+    // VOICE SELECTION LOGIC
+    // We look for specifically clear, high-quality American English voices
     selectedVoice =
-        voices.find(v => v.name.includes("Natural") && v.lang.includes("en")) ||
-        voices.find(v => v.name.includes("Zira")) ||
-        voices.find(v => v.name.includes("David")) ||
-        voices.find(v => v.name.includes("Mark")) ||
-        voices.find(v => v.lang.startsWith("en-")) ||
+        // 1. Apple's classic high-quality voices (iOS)
+        voices.find(v => v.name.includes("Samantha") || v.name.includes("Alex")) ||
+        // 2. Microsoft's new "Natural" voices (Windows Edge)
+        voices.find(v => v.name.includes("Natural") && v.lang.includes("en-US")) ||
+        // 3. Google's standard high-quality English (Android/Chrome)
+        voices.find(v => v.name.includes("Google US English")) ||
+        // 4. Standard Windows desktop voices
+        voices.find(v => v.name.includes("Zira") || v.name.includes("David")) ||
+        // 5. Fallback to any US English voice
+        voices.find(v => v.lang === "en-US") ||
         voices[0];
 }
 
-// Ensure voices load on all browsers
 window.speechSynthesis.onvoiceschanged = loadVoices;
 loadVoices(); 
 
 /* ========================================================
-SPEECH FUNCTION (UPDATED FOR WINDOWS STABILITY)
+SPEECH FUNCTION
 ======================================================== */
 
 function speak(letter) {
-    // 1. Clear any pending speech immediately
+    // Stop any existing speech to prevent Windows distortion
     window.speechSynthesis.cancel();
 
-    // 2. Short delay before starting new speech helps Windows sound buffers reset
+    // Small delay ensures the previous audio process is killed before starting new one
     setTimeout(() => {
         const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
 
@@ -200,13 +205,13 @@ function speak(letter) {
             utter.voice = selectedVoice;
         }
 
-        // Set rate to 1.0; Windows voices can distort if the rate is set too low or high
-        utter.rate = 1.0;   
-        utter.pitch = 1;
-        utter.volume = 1;
+        // Standardized settings for clarity
+        utter.rate = 0.9;   // Slightly slower than normal for better letter recognition
+        utter.pitch = 1.0;
+        utter.volume = 1.0;
 
         window.speechSynthesis.speak(utter);
-    }, 50); 
+    }, 40); 
 }
 
 /* ========================================================
