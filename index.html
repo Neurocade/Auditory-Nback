@@ -185,32 +185,41 @@ let timerMode = false;
 let totalSessionAccuracy = [];
 let lastRoundAccuracy = 0; 
 
-/* [NEW] SIMPLIFIED SPEECH SYSTEM 
-Removed the voice selection menu. The system now automatically
-searches for and locks onto the "Samantha" voice for consistency.
+/* [NEW] ADVANCED CROSS-PLATFORM SPEECH SYSTEM 
+This system uses a more aggressive buffer-clearing technique specifically 
+for Windows to eliminate digital distortion. It prioritizes Samantha for 
+iOS and Microsoft's "Natural" voices for Windows.
 */
 let selectedVoice = null;
 
 function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
-    // Prioritize Samantha (High quality US English)
-    selectedVoice = voices.find(v => v.name.includes("Samantha")) || 
-                    voices.find(v => v.lang === "en-US") || 
-                    voices[0];
+    
+    // 1. Try to find Samantha (iOS Gold Standard)
+    let samantha = voices.find(v => v.name.includes("Samantha"));
+    
+    // 2. Try to find Windows "Natural" (Highest quality PC voices)
+    let windowsNatural = voices.find(v => v.name.includes("Natural") && v.lang.includes("en-US"));
+    
+    // 3. Try standard American English (David/Zira/Google US)
+    let americanFallback = voices.find(v => v.lang === "en-US" || v.lang === "en_US");
+
+    selectedVoice = samantha || windowsNatural || americanFallback || voices[0];
 }
 
+// Fixed: iOS and Chrome need this to fire multiple times to catch voices
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = loadVoices;
 }
 loadVoices();
 
-// Keep-alive hack for Windows/Chrome to prevent speech engine timing out
+// Windows-specific keep-alive: prevents the engine from entering a low-power "crackle" state
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
         window.speechSynthesis.resume();
     }
-}, 10000);
+}, 5000);
 
 /* ========================================================
 PROGRESS TRACKING SYSTEM
@@ -379,20 +388,27 @@ function nextTrial() {
     }, isi);
 }
 
-/* [NEW] HARD-CODED SPEAK FUNCTION
-Uses a 50ms buffer-clear delay to prevent Windows distortion 
-and specifically uses the loaded Samantha voice.
+/* [NEW] ENHANCED SPEAK FUNCTION FOR WINDOWS
+Increases the "silence gap" between letters to 100ms. This prevents the 
+Windows speech synthesizer from clipping or sounding digital by giving 
+the hardware buffer extra time to fully clear.
 */
 function speak(letter) {
+    // Stop all speech and clear current buffer
     window.speechSynthesis.cancel();
+    
+    // Increased wait time (100ms) specifically helps Windows sound drivers "reset"
     setTimeout(() => {
         const utter = new SpeechSynthesisUtterance(letter.toLowerCase());
         if (selectedVoice) utter.voice = selectedVoice;
+        
+        // Rate 0.9 is the "Sweet Spot" for clarity on letters like 'B' and 'D'
         utter.rate = 0.9;
         utter.pitch = 1.0;
         utter.volume = 1.0;
+        
         window.speechSynthesis.speak(utter);
-    }, 50); 
+    }, 100); 
 }
 
 /* ========================================================
