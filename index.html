@@ -106,7 +106,6 @@ select {
 .stat-box { color: #FFD700; font-weight: bold; }
 .stat-row { font-size: 20px; margin: 5px 0; color: #ddd; }
 
-/* TIMER DISPLAY */
 #timerDisplay {
     font-size: 24px;
     color: #FFD700;
@@ -120,14 +119,11 @@ select {
     transform: translateX(-50%);
     border: 1px solid #444;
     border-top: none;
-    transition: color 0.3s ease, background 0.3s ease;
 }
 
 #timerDisplay.final-minute {
     color: #ff4444;
     background: #441111;
-    border-color: #ff4444;
-    font-weight: bold;
 }
 </style>
 </head>
@@ -148,7 +144,7 @@ select {
           <span id="structuredModeLabel">Structured Session Mode</span>
         </label>
         <br><br>
-        <label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
+        <label for="levelSelect">Select Starting Level (1-6): </label>
         <select id="levelSelect">
             <option value="1">1</option>
             <option value="2">2</option>
@@ -167,17 +163,16 @@ select {
 <div id="optionsScreen" style="display:none;">
     <h2>Options</h2>
     <div class="settings-group">
-        <label for="sessionLengthSelect">Structured Session Length: </label>
+        <label for="sessionLengthSelect">Session Length: </label>
         <select id="sessionLengthSelect">
             <option value="5">5 Minutes</option>
             <option value="10">10 Minutes</option>
             <option value="15">15 Minutes</option>
         </select>
     </div>
-    <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Statistics</button>
+    <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Stats</button>
     <br><br>
-    <button id="homeBtn" class="secondary-btn">Return to Home Screen</button>
-    <p id="resetMessage" style="color: #4caf50; display:none; margin-top: 20px; font-size: 20px;">Statistics successfully reset.</p>
+    <button id="homeBtn" class="secondary-btn">Return to Menu</button>
 </div>
 
 <div id="instructions" style="display:none;">
@@ -206,67 +201,50 @@ select {
 </div>
     
 <script>
-
 /* GLOBAL VARIABLES */
-let trialTimeout = null;  
-let timerInterval = null; 
-let n = 1;                
-let isi = 2500;           
-let trials = 30;          
-let sequence = [];
-let index = 0;
-let results = [];
-let trialActive = false;
-let sessionStartTime = 0;
-let timerMode = false;
-let sessionHits = 0, sessionMisses = 0, sessionFalseAlarms = 0;
-let totalSessionAccuracy = [];
+let trialTimeout = null, timerInterval = null;
+let n = 1, isi = 2500, trials = 30;
+let sequence = [], index = 0, results = [], trialActive = false;
+let sessionStartTime = 0, timerMode = false;
+let sessionHits = 0, sessionMisses = 0, sessionFalseAlarms = 0, totalSessionAccuracy = [];
 
-/* ========================================================
-AUDIO ENGINE 
-Uses a Dual-Channel system to ensure fast repeats play cleanly.
-======================================================== */
+/* AUDIO ENGINE */
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const audioPool = {};
 let audioWarmed = false;
 
-// Preload the audio objects immediately
+// Create audio objects but don't play yet
 LETTERS.forEach(letter => {
     audioPool[letter] = [
         new Audio(`Audio/${letter}.m4a`),
         new Audio(`Audio/${letter}.m4a`)
     ];
-    audioPool[letter][0].preload = "auto";
-    audioPool[letter][1].preload = "auto";
 });
 
-// This "warms" the audio ONLY after the user clicks "Start"
 function warmAudio() {
     if (audioWarmed) return;
-    LETTERS.forEach(l => {
-        audioPool[l][0].muted = true;
-        audioPool[l][0].play().then(() => {
-            audioPool[l][0].pause();
-            audioPool[l][0].muted = false;
-        }).catch(e => console.log("Warm up blocked", e));
-    });
-    audioWarmed = true;
+    // We play one silent sound to unlock the browser's audio engine
+    const silentTest = audioPool["A"][0];
+    silentTest.volume = 0;
+    silentTest.play().then(() => {
+        silentTest.pause();
+        silentTest.volume = 1;
+        audioWarmed = true;
+    }).catch(e => console.log("Unlock required", e));
 }
 
 let channelToggle = false; 
 function speak(letter) {
     const target = letter.toUpperCase();
     if (!audioPool[target]) return;
-    
     const audio = audioPool[target][channelToggle ? 0 : 1];
     channelToggle = !channelToggle;
-
     audio.pause();
     audio.currentTime = 0;
-    audio.play().catch(e => console.log("Playback error", e));
+    audio.play().catch(e => console.log("Play error", e));
 }
 
-/* PROGRESS LOGIC */
+/* PROGRESS */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
     return data || { sessions: 0, bestLevel: 1, accuracyHistory: [], bestAccuracyEver: 0, lastCompletedAccuracy: 0, preferredSessionLength: 10 };
@@ -289,41 +267,24 @@ function displayProgress() {
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
         Best Level Reached: ${data.bestLevel}-back<br>
-        Last Round Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
-        Average Total Accuracy: ${avg}%<br><br>`;
+        Last Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
+        Average Accuracy: ${avg}%<br><br>`;
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
-    document.getElementById("structuredModeLabel").textContent = `${data.preferredSessionLength}-Minute Structured Session Mode`;
+    document.getElementById("structuredModeLabel").textContent = `${data.preferredSessionLength}-Minute Session Mode`;
 }
 displayProgress();
 
-/* UI CONTROLS */
+/* UI */
 document.getElementById("optionsBtn").onclick = () => { document.getElementById("menu").style.display = "none"; document.getElementById("optionsScreen").style.display = "block"; };
 document.getElementById("homeBtn").onclick = () => { document.getElementById("optionsScreen").style.display = "none"; document.getElementById("menu").style.display = "block"; };
-document.getElementById("sessionLengthSelect").onchange = (e) => {
-    let data = loadProgress(); data.preferredSessionLength = parseInt(e.target.value);
-    localStorage.setItem("attentionProgress", JSON.stringify(data)); displayProgress();
-};
-document.getElementById("resetStatsBtn").onclick = () => { showModal("Delete all statistics?", () => { localStorage.removeItem("attentionProgress"); displayProgress(); }); };
+document.getElementById("resetStatsBtn").onclick = () => { showModal("Reset all statistics?", () => { localStorage.removeItem("attentionProgress"); displayProgress(); }); };
 
-/* TRAINING ENGINE */
-function startVisualTimer(min) {
-    const display = document.getElementById("timerDisplay");
-    display.style.display = "block"; display.classList.remove("final-minute");
-    let sec = min * 60;
-    timerInterval = setInterval(() => {
-        sec--;
-        let m = Math.floor(sec/60), s = sec%60;
-        display.textContent = `Time Remaining: ${m}:${s<10?'0':''}${s}`;
-        if (sec < 60) display.classList.add("final-minute");
-        if (sec <= 0) { clearInterval(timerInterval); display.textContent = "Time's Up!"; }
-    }, 1000);
-}
-
+/* TASK */
 document.getElementById("startBtn").onclick = () => {
-    warmAudio(); // Prepare audio when button is clicked
+    warmAudio(); 
     n = parseInt(document.getElementById("levelSelect").value);
     document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen and press MATCH when the current letter matches the one <strong>${n}</strong> back.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Press MATCH when the current letter is the same as the one <strong>${n}</strong> back.`;
     document.getElementById("instructions").style.display = "block";
 };
 
@@ -337,6 +298,19 @@ document.getElementById("beginTaskBtn").onclick = () => {
     runBlock();
 };
 
+function startVisualTimer(min) {
+    const display = document.getElementById("timerDisplay");
+    display.style.display = "block";
+    let sec = min * 60;
+    timerInterval = setInterval(() => {
+        sec--;
+        let m = Math.floor(sec/60), s = sec%60;
+        display.textContent = `Time Remaining: ${m}:${s<10?'0':''}${s}`;
+        if (sec < 60) display.classList.add("final-minute");
+        if (sec <= 0) clearInterval(timerInterval);
+    }, 1000);
+}
+
 function runBlock() {
     if (trialTimeout) clearTimeout(trialTimeout);
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
@@ -347,18 +321,11 @@ function runBlock() {
 
 function nextTrial() {
     if (index >= sequence.length) { endBlock(); return; }
-    
     speak(sequence[index]);
-    
     trialActive = true;
     let isTarget = (index >= n && sequence[index] === sequence[index-n]);
     results.push({ target: isTarget, responded: false });
-
-    trialTimeout = setTimeout(() => { 
-        trialActive = false; 
-        index++; 
-        nextTrial(); 
-    }, isi);
+    trialTimeout = setTimeout(() => { trialActive = false; index++; nextTrial(); }, isi);
 }
 
 function registerResponse() {
@@ -367,7 +334,6 @@ function registerResponse() {
     document.getElementById("matchBtn").classList.add("pressed");
     setTimeout(() => document.getElementById("matchBtn").classList.remove("pressed"), 150);
 }
-
 document.getElementById("matchBtn").onclick = registerResponse;
 document.onkeydown = (e) => { if (e.code === "Space") { e.preventDefault(); registerResponse(); } };
 
@@ -383,12 +349,10 @@ function endBlock() {
     totalSessionAccuracy.push(bAcc);
 
     if (bAcc >= 85 && n < 6) {
-        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
+        showModal("Increase level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
     } else if (bAcc < 60 && n > 1) {
         n--; showLevelReminder();
-    } else { 
-        continueSession(); 
-    }
+    } else { continueSession(); }
 }
 
 function continueSession() {
@@ -403,9 +367,7 @@ function endSession() {
     let div = document.getElementById("results"); div.style.display = "block";
     let avg = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
     saveProgress(n, avg);
-    div.innerHTML = `<h2>Session Complete</h2><p>Accuracy: <span class="stat-box">${avg}%</span></p>
-    <div class="stat-row">🎯 Hits: ${sessionHits} | ❌ Misses: ${sessionMisses} | ⚠️ False Alarms: ${sessionFalseAlarms}</div>
-    <br><button onclick="location.reload()">Return to Menu</button>`;
+    div.innerHTML = `<h2>Complete</h2><p>Accuracy: ${avg}%</p><button onclick="location.reload()">Menu</button>`;
 }
 
 function buildSequence(len, nVal) {
@@ -427,7 +389,7 @@ function showModal(m, y, ncb) {
 }
 
 function showLevelReminder() {
-    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
+    document.getElementById("instructionsBox").innerHTML = `Level ${n} — match ${n} back.`;
     document.getElementById("instructions").style.display = "block";
     document.getElementById("beginTaskBtn").onclick = () => { document.getElementById("instructions").style.display = "none"; runBlock(); };
 }
