@@ -7,7 +7,6 @@
 <style>
 /* ========================================================
 SENIOR FRIENDLY DESIGN
-Large fonts, high contrast, low clutter
 ======================================================== */
 
 body {
@@ -41,12 +40,6 @@ button {
     cursor: pointer;
     background: #444;
     color: white;
-}
-
-button:disabled {
-    background: #222;
-    color: #555;
-    cursor: not-allowed;
 }
 
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
@@ -113,19 +106,6 @@ select {
 .stat-box { color: #FFD700; font-weight: bold; }
 .stat-row { font-size: 20px; margin: 5px 0; color: #ddd; }
 
-/* LOADING SCREEN OVERLAY */
-#loadingOverlay {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: #1e1e1e;
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    border-radius: 12px;
-}
-
 /* TIMER DISPLAY */
 #timerDisplay {
     font-size: 24px;
@@ -154,11 +134,6 @@ select {
 
 <body>
 <div id="app">
-
-<div id="loadingOverlay">
-    <h2>Calibrating Audio Engine...</h2>
-    <p id="loadingStatus">Please wait a moment.</p>
-</div>
 
 <div id="timerDisplay" style="display:none;">Time Remaining: 10:00</div>
 
@@ -232,9 +207,7 @@ select {
     
 <script>
 
-/* ========================================================
-GLOBAL VARIABLES
-======================================================== */
+/* GLOBAL VARIABLES */
 let trialTimeout = null;  
 let timerInterval = null; 
 let n = 1;                
@@ -250,58 +223,34 @@ let sessionHits = 0, sessionMisses = 0, sessionFalseAlarms = 0;
 let totalSessionAccuracy = [];
 
 /* ========================================================
-HIGH-PERFORMANCE AUDIO ENGINE
-Dual-channel prevents audio clipping/lag during fast transitions
+AUDIO ENGINE 
+Uses a Dual-Channel system to ensure fast repeats play cleanly.
 ======================================================== */
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const audioPool = {};
-let loadedCount = 0;
+let audioWarmed = false;
 
-function initAudioPreload() {
-    LETTERS.forEach(letter => {
-        // We create two copies of every sound to handle repeats smoothly
-        audioPool[letter] = [
-            new Audio(`Audio/${letter}.m4a`),
-            new Audio(`Audio/${letter}.m4a`)
-        ];
-        
-        audioPool[letter][0].preload = "auto";
-        audioPool[letter][1].preload = "auto";
+// Preload the audio objects immediately
+LETTERS.forEach(letter => {
+    audioPool[letter] = [
+        new Audio(`Audio/${letter}.m4a`),
+        new Audio(`Audio/${letter}.m4a`)
+    ];
+    audioPool[letter][0].preload = "auto";
+    audioPool[letter][1].preload = "auto";
+});
 
-        audioPool[letter][0].oncanplaythrough = () => {
-            if (!audioPool[letter].ready) {
-                audioPool[letter].ready = true;
-                loadedCount++;
-                updateLoadingProgress();
-            }
-        };
-
-        audioPool[letter][0].onerror = () => {
-            console.error(`Error finding Audio/${letter}.m4a`);
-            loadedCount++;
-            updateLoadingProgress();
-        };
+// This "warms" the audio ONLY after the user clicks "Start"
+function warmAudio() {
+    if (audioWarmed) return;
+    LETTERS.forEach(l => {
+        audioPool[l][0].muted = true;
+        audioPool[l][0].play().then(() => {
+            audioPool[l][0].pause();
+            audioPool[l][0].muted = false;
+        }).catch(e => console.log("Warm up blocked", e));
     });
-}
-
-function updateLoadingProgress() {
-    const statusText = document.getElementById("loadingStatus");
-    statusText.textContent = `Preparing audio files: ${loadedCount} of 26`;
-    
-    if (loadedCount >= 26) {
-        // "Warm" the audio engine by playing silent buffers
-        LETTERS.forEach(l => {
-            audioPool[l][0].volume = 0;
-            audioPool[l][0].play().then(() => {
-                audioPool[l][0].pause();
-                audioPool[l][0].volume = 1;
-            }).catch(()=>{});
-        });
-        
-        setTimeout(() => { 
-            document.getElementById("loadingOverlay").style.display = "none"; 
-        }, 1000);
-    }
+    audioWarmed = true;
 }
 
 let channelToggle = false; 
@@ -309,33 +258,18 @@ function speak(letter) {
     const target = letter.toUpperCase();
     if (!audioPool[target]) return;
     
-    // Switch between the two channels to allow back-to-back repeats
     const audio = audioPool[target][channelToggle ? 0 : 1];
     channelToggle = !channelToggle;
 
     audio.pause();
     audio.currentTime = 0;
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-        playPromise.catch(e => console.log("Audio Playback Error:", e));
-    }
+    audio.play().catch(e => console.log("Playback error", e));
 }
 
-initAudioPreload();
-
-/* ========================================================
-STATISTICS & PERSISTENCE
-======================================================== */
+/* PROGRESS LOGIC */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
-    return data || { 
-        sessions: 0, 
-        bestLevel: 1, 
-        accuracyHistory: [], 
-        bestAccuracyEver: 0, 
-        lastCompletedAccuracy: 0, 
-        preferredSessionLength: 10 
-    };
+    return data || { sessions: 0, bestLevel: 1, accuracyHistory: [], bestAccuracyEver: 0, lastCompletedAccuracy: 0, preferredSessionLength: 10 };
 }
 
 function saveProgress(level, accuracy) {
@@ -351,67 +285,45 @@ function saveProgress(level, accuracy) {
 function displayProgress() {
     let data = loadProgress();
     let avg = data.accuracyHistory.length > 0 ? Math.round(data.accuracyHistory.reduce((a,b)=>a+b,0) / data.accuracyHistory.length) : 0;
-    
     document.getElementById("progressSummary").innerHTML = `
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
         Best Level Reached: ${data.bestLevel}-back<br>
         Last Round Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
         Average Total Accuracy: ${avg}%<br><br>`;
-
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
     document.getElementById("structuredModeLabel").textContent = `${data.preferredSessionLength}-Minute Structured Session Mode`;
 }
 displayProgress();
 
-/* ========================================================
-UI CONTROLS
-======================================================== */
-document.getElementById("optionsBtn").onclick = () => { 
-    document.getElementById("menu").style.display = "none"; 
-    document.getElementById("optionsScreen").style.display = "block"; 
-};
-document.getElementById("homeBtn").onclick = () => { 
-    document.getElementById("optionsScreen").style.display = "none"; 
-    document.getElementById("menu").style.display = "block"; 
-};
+/* UI CONTROLS */
+document.getElementById("optionsBtn").onclick = () => { document.getElementById("menu").style.display = "none"; document.getElementById("optionsScreen").style.display = "block"; };
+document.getElementById("homeBtn").onclick = () => { document.getElementById("optionsScreen").style.display = "none"; document.getElementById("menu").style.display = "block"; };
 document.getElementById("sessionLengthSelect").onchange = (e) => {
-    let data = loadProgress(); 
-    data.preferredSessionLength = parseInt(e.target.value);
-    localStorage.setItem("attentionProgress", JSON.stringify(data)); 
-    displayProgress();
+    let data = loadProgress(); data.preferredSessionLength = parseInt(e.target.value);
+    localStorage.setItem("attentionProgress", JSON.stringify(data)); displayProgress();
 };
-document.getElementById("resetStatsBtn").onclick = () => { 
-    showModal("Permanently delete all statistics?", () => { 
-        localStorage.removeItem("attentionProgress"); 
-        displayProgress(); 
-    }); 
-};
+document.getElementById("resetStatsBtn").onclick = () => { showModal("Delete all statistics?", () => { localStorage.removeItem("attentionProgress"); displayProgress(); }); };
 
-/* ========================================================
-CORE TRAINING ENGINE
-======================================================== */
-function startVisualTimer(minutes) {
+/* TRAINING ENGINE */
+function startVisualTimer(min) {
     const display = document.getElementById("timerDisplay");
-    display.style.display = "block"; 
-    display.classList.remove("final-minute");
-    let secondsRemaining = minutes * 60;
-
+    display.style.display = "block"; display.classList.remove("final-minute");
+    let sec = min * 60;
     timerInterval = setInterval(() => {
-        secondsRemaining--;
-        let m = Math.floor(secondsRemaining / 60);
-        let s = secondsRemaining % 60;
-        display.textContent = `Time Remaining: ${m}:${s < 10 ? '0' : ''}${s}`;
-        
-        if (secondsRemaining < 60) display.classList.add("final-minute");
-        if (secondsRemaining <= 0) clearInterval(timerInterval);
+        sec--;
+        let m = Math.floor(sec/60), s = sec%60;
+        display.textContent = `Time Remaining: ${m}:${s<10?'0':''}${s}`;
+        if (sec < 60) display.classList.add("final-minute");
+        if (sec <= 0) { clearInterval(timerInterval); display.textContent = "Time's Up!"; }
     }, 1000);
 }
 
 document.getElementById("startBtn").onclick = () => {
+    warmAudio(); // Prepare audio when button is clicked
     n = parseInt(document.getElementById("levelSelect").value);
     document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press MATCH when the current letter is the same as the one <strong>${n}</strong> back.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen and press MATCH when the current letter matches the one <strong>${n}</strong> back.`;
     document.getElementById("instructions").style.display = "block";
 };
 
@@ -420,26 +332,22 @@ document.getElementById("beginTaskBtn").onclick = () => {
     document.getElementById("task").style.display = "block";
     timerMode = document.getElementById("timerMode").checked;
     sessionStartTime = Date.now();
-    
     if (timerMode) startVisualTimer(loadProgress().preferredSessionLength);
-    
-    sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0; 
-    totalSessionAccuracy = [];
+    sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0; totalSessionAccuracy = [];
     runBlock();
 };
 
 function runBlock() {
+    if (trialTimeout) clearTimeout(trialTimeout);
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
     sequence = buildSequence(trials, n);
-    index = 0; 
-    results = [];
+    index = 0; results = [];
     nextTrial();
 }
 
 function nextTrial() {
     if (index >= sequence.length) { endBlock(); return; }
     
-    // Play sound immediately at start of interval
     speak(sequence[index]);
     
     trialActive = true;
@@ -456,103 +364,72 @@ function nextTrial() {
 function registerResponse() {
     if (!trialActive) return;
     results[index].responded = true;
-    const btn = document.getElementById("matchBtn");
-    btn.classList.add("pressed");
-    setTimeout(() => btn.classList.remove("pressed"), 150);
+    document.getElementById("matchBtn").classList.add("pressed");
+    setTimeout(() => document.getElementById("matchBtn").classList.remove("pressed"), 150);
 }
 
 document.getElementById("matchBtn").onclick = registerResponse;
 document.onkeydown = (e) => { if (e.code === "Space") { e.preventDefault(); registerResponse(); } };
 
-/* ========================================================
-RESULTS & ADAPTIVE LOGIC
-======================================================== */
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
         let r = results[i];
-        if (r.target) { 
-            tTarg++; 
-            if (r.responded) bHits++; else sessionMisses++; 
-        } else { 
-            tNon++; 
-            if (r.responded) bFA++; 
-        }
+        if (r.target) { tTarg++; if (r.responded) bHits++; else sessionMisses++; }
+        else { tNon++; if (r.responded) bFA++; }
     }
     sessionHits += bHits; sessionFalseAlarms += bFA;
     let bAcc = (tTarg + tNon) === 0 ? 0 : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
     totalSessionAccuracy.push(bAcc);
 
     if (bAcc >= 85 && n < 6) {
-        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSessionCheck(); });
+        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
     } else if (bAcc < 60 && n > 1) {
         n--; showLevelReminder();
     } else { 
-        continueSessionCheck(); 
+        continueSession(); 
     }
 }
 
-function continueSessionCheck() {
-    let sessionDur = loadProgress().preferredSessionLength * 60000;
-    if (timerMode && (Date.now() - sessionStartTime < sessionDur)) {
-        runBlock();
-    } else { 
-        clearInterval(timerInterval); 
-        endSession(); 
-    }
+function continueSession() {
+    let dur = loadProgress().preferredSessionLength * 60000;
+    if (timerMode && (Date.now() - sessionStartTime < dur)) runBlock();
+    else { clearInterval(timerInterval); endSession(); }
 }
 
 function endSession() {
     document.getElementById("task").style.display = "none";
     document.getElementById("timerDisplay").style.display = "none";
-    let div = document.getElementById("results");
-    div.style.display = "block";
+    let div = document.getElementById("results"); div.style.display = "block";
     let avg = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
     saveProgress(n, avg);
-
-    div.innerHTML = `
-    <h2>Session Complete</h2>
-    <p>Session Total Accuracy: <span class="stat-box">${avg}%</span></p>
-    <div style="text-align: left; display: inline-block; background: #222; padding: 20px; border-radius: 10px;">
-        <div class="stat-row">🎯 Hits: <span class="stat-box">${sessionHits}</span></div>
-        <div class="stat-row">❌ Misses: <span style="color: #ff9999;">${sessionMisses}</span></div>
-        <div class="stat-row">⚠️ False Alarms: <span style="color: #ff9999;">${sessionFalseAlarms}</span></div>
-    </div>
-    <br><br><button onclick="location.reload()">Return to Menu</button>`;
+    div.innerHTML = `<h2>Session Complete</h2><p>Accuracy: <span class="stat-box">${avg}%</span></p>
+    <div class="stat-row">🎯 Hits: ${sessionHits} | ❌ Misses: ${sessionMisses} | ⚠️ False Alarms: ${sessionFalseAlarms}</div>
+    <br><button onclick="location.reload()">Return to Menu</button>`;
 }
 
 function buildSequence(len, nVal) {
-    let s = []; let tIndices = new Set(); let validRange = len - nVal;
-    let targetCount = Math.round(validRange * 0.3);
-    while (tIndices.size < targetCount) {
-        let p = Math.floor(Math.random() * validRange) + nVal;
-        if (!tIndices.has(p-1)) tIndices.add(p);
-    }
+    let s = []; let t = new Set(); let v = len - nVal; let d = Math.round(v * 0.3);
+    while (t.size < d) { let p = Math.floor(Math.random() * v) + nVal; if (!t.has(p-1)) t.add(p); }
     for (let i = 0; i < len; i++) {
         if (i < nVal) s.push(LETTERS[Math.floor(Math.random() * 26)]);
-        else if (tIndices.has(i)) s.push(s[i-nVal]);
-        else {
-            let opts = LETTERS.filter(x => x !== s[i-nVal]);
-            s.push(opts[Math.floor(Math.random() * opts.length)]);
-        }
+        else if (t.has(i)) s.push(s[i-nVal]);
+        else { let opts = LETTERS.filter(x => x !== s[i-nVal]); s.push(opts[Math.floor(Math.random() * opts.length)]); }
     }
     return s;
 }
 
-function showModal(mText, yesAction, noAction) {
-    document.getElementById("modalMessage").textContent = mText;
-    const m = document.getElementById("customModal"); m.style.display = "flex";
-    document.getElementById("modalYesBtn").onclick = () => { m.style.display = "none"; if(yesAction) yesAction(); };
-    document.getElementById("modalNoBtn").onclick = () => { m.style.display = "none"; if(noAction) noAction(); };
+function showModal(m, y, ncb) {
+    document.getElementById("modalMessage").textContent = m;
+    document.getElementById("customModal").style.display = "flex";
+    document.getElementById("modalYesBtn").onclick = () => { document.getElementById("customModal").style.display = "none"; if(y) y(); };
+    document.getElementById("modalNoBtn").onclick = () => { document.getElementById("customModal").style.display = "none"; if(ncb) ncb(); };
 }
 
 function showLevelReminder() {
-    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} letters back.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
     document.getElementById("instructions").style.display = "block";
-    document.getElementById("beginTaskBtn").onclick = () => { 
-        document.getElementById("instructions").style.display = "none"; 
-        runBlock(); 
-    };
+    document.getElementById("beginTaskBtn").onclick = () => { document.getElementById("instructions").style.display = "none"; runBlock(); };
 }
 </script>
 </body>
