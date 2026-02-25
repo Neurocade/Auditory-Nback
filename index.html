@@ -2,30 +2,33 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Attention Training Program</title>
 
 <style>
 /* ========================================================
-SENIOR FRIENDLY DESIGN (CODE 2 RESTORED)
+SENIOR FRIENDLY & MOBILE RESPONSIVE DESIGN
 ======================================================== */
-
 body {
     font-family: Arial, sans-serif;
     background: #111;
     color: #fff;
     display: flex;
     justify-content: center;
-    padding-top: 30px;
+    padding: 15px;
+    margin: 0;
 }
 
 #app {
-    width: 850px;
+    width: 100%;
+    max-width: 850px;
     background: #1e1e1e;
     padding: 30px;
     border-radius: 12px;
     text-align: center;
     position: relative;
-    min-height: 550px;
+    min-height: 600px;
+    border: 1px solid #333;
 }
 
 h1 { font-size: 34px; margin-bottom: 10px; }
@@ -33,18 +36,17 @@ h2 { font-size: 26px; color: #4caf50; }
 
 button {
     font-size: 22px;
-    padding: 14px 24px;
+    padding: 16px 24px;
     margin: 10px;
-    border-radius: 10px;
+    border-radius: 12px;
     border: none;
     cursor: pointer;
     background: #444;
     color: white;
-    transition: background 0.2s;
+    -webkit-tap-highlight-color: transparent;
 }
 
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
-#startBtn:hover { background: #45a049; }
 
 .secondary-btn {
     font-size: 18px;
@@ -54,27 +56,28 @@ button {
 }
 
 #matchBtn {
-    font-size: 30px;
+    font-size: 32px;
     background: #4caf50;
     color: black;
     cursor: pointer;
     border: none;
-    border-radius: 10px;
-    padding: 25px 50px;
+    border-radius: 15px;
+    padding: 35px 60px;
     font-weight: bold;
-    box-shadow: 0 4px #2d6a30;
+    width: 80%;
+    max-width: 400px;
+    margin-top: 20px;
+    box-shadow: 0 6px #2d6a30;
 }
 
-#matchBtn.pressed {
-    background: #2ecc71;
+#matchBtn:active {
     transform: translateY(4px);
-    box-shadow: 0 0px #2d6a30;
+    box-shadow: 0 2px #2d6a30;
 }
 
 select {
     font-size: 20px;
     padding: 8px;
-    margin: 6px;
     background: #333;
     color: white;
     border: 1px solid #555;
@@ -87,17 +90,11 @@ select {
     font-weight: bold;
 }
 
-#results {
-    display: none;
-    font-size: 22px;
-}
-
 #instructionsBox {
     background: #222;
     padding: 25px;
     border-radius: 10px;
     font-size: 22px;
-    margin-top: 20px;
     text-align: left;
     line-height: 1.5;
     border: 1px solid #333;
@@ -115,7 +112,7 @@ select {
 .stat-row { font-size: 20px; margin: 8px 0; color: #ddd; }
 
 #timerDisplay {
-    font-size: 24px;
+    font-size: 22px;
     color: #FFD700;
     background: #333;
     padding: 10px 25px;
@@ -132,7 +129,27 @@ select {
 #timerDisplay.final-minute {
     color: #ff4444;
     background: #441111;
-    font-weight: bold;
+}
+
+/* CUSTOM MODAL */
+#customModal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9);
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.modal-content {
+    background: #222;
+    padding: 35px;
+    border-radius: 12px;
+    width: 85%;
+    max-width: 500px;
+    text-align: center;
+    border: 2px solid #444;
 }
 </style>
 </head>
@@ -153,14 +170,11 @@ select {
           <span id="structuredModeLabel">Structured Session Mode</span>
         </label>
         <br><br>
-        <label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
+        <label for="levelSelect">Starting Level (1-6): </label>
         <select id="levelSelect">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
+            <option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option>
+            <option value="5">5</option><option value="6">6</option>
         </select>
     </div>
 
@@ -172,7 +186,7 @@ select {
 <div id="optionsScreen" style="display:none;">
     <h2>Options</h2>
     <div class="settings-group">
-        <label for="sessionLengthSelect">Structured Session Length: </label>
+        <label for="sessionLengthSelect">Session Length: </label>
         <select id="sessionLengthSelect">
             <option value="5">5 Minutes</option>
             <option value="10">10 Minutes</option>
@@ -181,8 +195,7 @@ select {
     </div>
     <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Statistics</button>
     <br><br>
-    <button id="homeBtn" class="secondary-btn">Return to Home Screen</button>
-    <p id="resetMessage" style="color: #4caf50; display:none; margin-top: 20px; font-size: 20px;">Statistics successfully reset.</p>
+    <button id="homeBtn" class="secondary-btn">Return to Main Menu</button>
 </div>
 
 <div id="instructions" style="display:none;">
@@ -197,49 +210,53 @@ select {
     <button id="matchBtn">MATCH</button>
 </div>
 
-<div id="results"></div>
+<div id="results" style="display:none;"></div>
 
-</div>
-
-<div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:1000;">
-    <div style="background:#222; padding:35px; border-radius:12px; width:500px; text-align:center; border: 2px solid #444;">
+<div id="customModal">
+    <div class="modal-content">
         <p id="modalMessage" style="font-size:24px; line-height: 1.4;"></p>
         <br>
         <button id="modalYesBtn" style="background:#4caf50; color:black; font-weight:bold;">Yes</button>
         <button id="modalNoBtn" style="background:#f44336; color:white; font-weight:bold;">No</button>
     </div>
 </div>
-    
+
+</div>
+
 <script>
-/* GLOBAL VARIABLES */
-let trialTimeout = null, timerInterval = null; 
-let n = 1, isi = 2500, trials = 30;          
+/* GLOBAL STATE */
+let n = 1, isi = 2500, trials = 30;
 let sequence = [], index = 0, results = [], trialActive = false;
 let sessionStartTime = 0, timerMode = false;
 let sessionHits = 0, sessionMisses = 0, sessionFalseAlarms = 0;
 let totalSessionAccuracy = [];
+let timerInterval = null, trialTimeout = null;
 
-/* AUDIO ENGINE (YOUR .M4A FILES) */
+/* DUAL-CHANNEL iOS AUDIO ENGINE */
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const audioPool = {};
-let audioWarmed = false;
+let audioUnlocked = false;
 
-// Preload the Audio folder
-LETTERS.forEach(letter => {
-    audioPool[letter] = [
-        new Audio(`Audio/${letter}.m4a`),
-        new Audio(`Audio/${letter}.m4a`)
+// Pre-create the objects
+LETTERS.forEach(l => {
+    audioPool[l] = [
+        new Audio(`Audio/${l}.m4a`),
+        new Audio(`Audio/${l}.m4a`)
     ];
 });
 
-function warmAudio() {
-    if (audioWarmed) return;
-    const test = audioPool["A"][0];
-    test.volume = 0;
-    test.play().then(() => { test.pause(); test.volume = 1; audioWarmed = true; }).catch(e => {});
+function unlockAudio() {
+    if (audioUnlocked) return;
+    // iOS requires playing a sound within a user-click event to "unlock" the audio
+    Object.values(audioPool).forEach(pair => {
+        pair.forEach(a => {
+            a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
+        });
+    });
+    audioUnlocked = true;
 }
 
-let channelToggle = false; 
+let channelToggle = false;
 function speak(letter) {
     const target = letter.toUpperCase();
     if (!audioPool[target]) return;
@@ -247,10 +264,10 @@ function speak(letter) {
     channelToggle = !channelToggle;
     audio.pause();
     audio.currentTime = 0;
-    audio.play().catch(e => console.log("Playback error", e));
+    audio.play().catch(e => console.log("Audio play blocked", e));
 }
 
-/* PROGRESS LOGIC */
+/* PROGRESS TRACKING */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
     return data || { sessions: 0, bestLevel: 1, accuracyHistory: [], bestAccuracyEver: 0, lastCompletedAccuracy: 0, preferredSessionLength: 10 };
@@ -273,7 +290,7 @@ function displayProgress() {
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
         Best Level Reached: ${data.bestLevel}-back<br>
-        Last Round Total Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
+        Last Round Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
         Average Total Accuracy: ${avg}%<br>
         Best Total Accuracy: ${data.bestAccuracyEver}%<br><br>`;
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
@@ -281,30 +298,21 @@ function displayProgress() {
 }
 displayProgress();
 
-/* UI NAVIGATION */
+/* MENU & OPTIONS NAVIGATION */
 document.getElementById("optionsBtn").onclick = () => { document.getElementById("menu").style.display = "none"; document.getElementById("optionsScreen").style.display = "block"; };
 document.getElementById("homeBtn").onclick = () => { document.getElementById("optionsScreen").style.display = "none"; document.getElementById("menu").style.display = "block"; };
-document.getElementById("resetStatsBtn").onclick = () => { showModal("Are you sure you want to permanently delete all your training statistics?", () => { localStorage.removeItem("attentionProgress"); displayProgress(); }); };
+document.getElementById("sessionLengthSelect").onchange = (e) => {
+    let data = loadProgress(); data.preferredSessionLength = parseInt(e.target.value);
+    localStorage.setItem("attentionProgress", JSON.stringify(data)); displayProgress();
+};
+document.getElementById("resetStatsBtn").onclick = () => { showModal("Permanently delete all statistics?", () => { localStorage.removeItem("attentionProgress"); displayProgress(); }); };
 
-/* TASK ENGINE */
-function startVisualTimer(min) {
-    const display = document.getElementById("timerDisplay");
-    display.style.display = "block"; display.classList.remove("final-minute");
-    let sec = min * 60;
-    timerInterval = setInterval(() => {
-        sec--;
-        let m = Math.floor(sec/60), s = sec%60;
-        display.textContent = `Time Remaining: ${m}:${s<10?'0':''}${s}`;
-        if (sec < 60) display.classList.add("final-minute");
-        if (sec <= 0) { clearInterval(timerInterval); display.textContent = "Time's Up!"; }
-    }, 1000);
-}
-
+/* TRAINING ENGINE */
 document.getElementById("startBtn").onclick = () => {
-    warmAudio();
+    unlockAudio(); // Critical for iOS
     n = parseInt(document.getElementById("levelSelect").value);
     document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press the MATCH button when the current letter matches the one <strong>${n}</strong> back.<br><br>Avoid pressing for non-matches.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press MATCH when the current letter matches the one <strong>${n}</strong> back.<br><br>Try to be as accurate as possible.`;
     document.getElementById("instructions").style.display = "block";
 };
 
@@ -317,6 +325,19 @@ document.getElementById("beginTaskBtn").onclick = () => {
     sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0; totalSessionAccuracy = [];
     runBlock();
 };
+
+function startVisualTimer(min) {
+    const display = document.getElementById("timerDisplay");
+    display.style.display = "block";
+    let sec = min * 60;
+    timerInterval = setInterval(() => {
+        sec--;
+        let m = Math.floor(sec/60), s = sec%60;
+        display.textContent = `Time Remaining: ${m}:${s<10?'0':''}${s}`;
+        if (sec < 60) display.classList.add("final-minute");
+        if (sec <= 0) clearInterval(timerInterval);
+    }, 1000);
+}
 
 function runBlock() {
     if (trialTimeout) clearTimeout(trialTimeout);
@@ -338,13 +359,13 @@ function nextTrial() {
 function registerResponse() {
     if (!trialActive) return;
     results[index].responded = true;
-    document.getElementById("matchBtn").classList.add("pressed");
-    setTimeout(() => document.getElementById("matchBtn").classList.remove("pressed"), 150);
+    // Visual feedback for match button
+    document.getElementById("matchBtn").style.background = "#2ecc71";
+    setTimeout(() => { document.getElementById("matchBtn").style.background = "#4caf50"; }, 150);
 }
 document.getElementById("matchBtn").onclick = registerResponse;
-document.onkeydown = (e) => { if (e.code === "Space") { e.preventDefault(); registerResponse(); } };
 
-/* ADAPTIVE LOGIC & END SESSION */
+/* SCORING & CONTINUATION */
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
@@ -357,15 +378,15 @@ function endBlock() {
     totalSessionAccuracy.push(bAcc);
 
     if (bAcc >= 85 && n < 6) {
-        showModal("Excellent focus! You reached " + bAcc + "% accuracy. Would you like to increase the challenge to Level " + (n+1) + "?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
+        showModal(`Excellent focus! You reached ${bAcc}% accuracy. Would you like to increase the challenge to Level ${n+1}?`, () => { n++; showLevelReminder(); }, () => { continueCheck(); });
     } else if (bAcc < 60 && n > 1) {
-        showModal("That was a tough round. Let's move back to Level " + (n-1) + " to sharpen your focus.", () => { n--; showLevelReminder(); });
+        showModal(`That was a tough round. Let's move back to Level ${n-1} to sharpen your focus.`, () => { n--; showLevelReminder(); });
     } else { 
-        continueSession(); 
+        continueCheck(); 
     }
 }
 
-function continueSession() {
+function continueCheck() {
     let dur = loadProgress().preferredSessionLength * 60000;
     if (timerMode && (Date.now() - sessionStartTime < dur)) runBlock();
     else { clearInterval(timerInterval); endSession(); }
@@ -382,8 +403,8 @@ function endSession() {
     <p>Session Total Accuracy: <span class="stat-box">${avg}%</span></p>
     <div style="text-align: left; display: inline-block; background: #222; padding: 20px; border-radius: 10px; border: 1px solid #444;">
         <div class="stat-row">🎯 Hits: <span class="stat-box">${sessionHits}</span></div>
-        <div class="stat-row">❌ Misses: <span style="color: #ff9999; font-weight: bold;">${sessionMisses}</span></div>
-        <div class="stat-row">⚠️ False Alarms: <span style="color: #ff9999; font-weight: bold;">${sessionFalseAlarms}</span></div>
+        <div class="stat-row">❌ Misses: <span style="color: #ff9999;">${sessionMisses}</span></div>
+        <div class="stat-row">⚠️ False Alarms: <span style="color: #ff9999;">${sessionFalseAlarms}</span></div>
     </div>
     <br><br><button onclick="location.reload()">Return to Main Menu</button>`;
 }
