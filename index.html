@@ -26,7 +26,7 @@ body {
     border-radius: 12px;
     text-align: center;
     position: relative;
-    min-height: 500px;
+    min-height: 550px;
 }
 
 h1 { font-size: 34px; }
@@ -41,6 +41,12 @@ button {
     cursor: pointer;
     background: #444;
     color: white;
+}
+
+button:disabled {
+    background: #222;
+    color: #555;
+    cursor: not-allowed;
 }
 
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
@@ -107,6 +113,19 @@ select {
 .stat-box { color: #FFD700; font-weight: bold; }
 .stat-row { font-size: 20px; margin: 5px 0; color: #ddd; }
 
+/* LOADING SCREEN OVERLAY */
+#loadingOverlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #1e1e1e;
+    z-index: 2000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-radius: 12px;
+}
+
 /* TIMER DISPLAY */
 #timerDisplay {
     font-size: 24px;
@@ -124,7 +143,6 @@ select {
     transition: color 0.3s ease, background 0.3s ease;
 }
 
-/* [NEW] Final Minute Alert Class */
 #timerDisplay.final-minute {
     color: #ff4444;
     background: #441111;
@@ -136,6 +154,11 @@ select {
 
 <body>
 <div id="app">
+
+<div id="loadingOverlay">
+    <h2>Loading Audio Files...</h2>
+    <p id="loadingStatus">Please wait a moment.</p>
+</div>
 
 <div id="timerDisplay" style="display:none;">Time Remaining: 10:00</div>
 
@@ -150,7 +173,7 @@ select {
           <span id="structuredModeLabel">Structured Session Mode</span>
         </label>
         <br><br>
-        <label for="levelSelect">Select Starting Level: </label>
+        <label for="levelSelect">Select Starting Level (1 = easiest, 6 = very challenging): </label>
         <select id="levelSelect">
             <option value="1">1</option>
             <option value="2">2</option>
@@ -211,7 +234,9 @@ select {
     
 <script>
 
-/* GLOBAL VARIABLES */
+/* ========================================================
+GLOBAL VARIABLES
+======================================================== */
 let trialTimeout = null;  
 let timerInterval = null; 
 let n = 1;                
@@ -229,25 +254,62 @@ let sessionHits = 0;
 let sessionMisses = 0;
 let sessionFalseAlarms = 0;
 
-/* SPEECH LOGIC */
-let selectedVoice = null;
-function loadVoices() {
-    const voices = window.speechSynthesis.getVoices();
-    selectedVoice = voices.find(v => v.name.includes("Samantha")) || 
-                    voices.find(v => v.lang.includes("en-US")) || 
-                    voices[0];
+/* ========================================================
+PRERECORDED AUDIO SYSTEM (.m4a) & LOADING LOGIC
+======================================================== */
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const letterAudio = {};
+let loadedCount = 0;
+
+// Initialize Preloading
+function initAudioPreload() {
+    LETTERS.forEach(letter => {
+        const audio = new Audio(`Audio/${letter}.m4a`);
+        audio.preload = "auto";
+        
+        // Count when a file is ready
+        audio.oncanplaythrough = () => {
+            if(!letterAudio[letter]) { // Only count once per letter
+                loadedCount++;
+                updateLoadingProgress();
+            }
+            letterAudio[letter] = audio;
+        };
+
+        // Fallback if browser blocks automatic preloading
+        audio.onerror = () => {
+            console.error(`Error loading Audio/${letter}.m4a`);
+            loadedCount++; // Increment anyway to prevent infinite loading screen
+            updateLoadingProgress();
+        };
+    });
 }
-if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
-loadVoices();
 
-/* PREVENT AUDIO CUTOFF */
-setInterval(() => {
-    if (window.speechSynthesis && !window.speechSynthesis.speaking) {
-        const p = new SpeechSynthesisUtterance(""); p.volume = 0; window.speechSynthesis.speak(p);
+function updateLoadingProgress() {
+    const statusText = document.getElementById("loadingStatus");
+    statusText.textContent = `Prepared ${loadedCount} of 26 files...`;
+    
+    if (loadedCount >= 26) {
+        setTimeout(() => {
+            document.getElementById("loadingOverlay").style.display = "none";
+        }, 500);
     }
-}, 5000);
+}
 
-/* PROGRESS & SETTINGS */
+function speak(letter) {
+    const audio = letterAudio[letter.toUpperCase()];
+    if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.play().catch(e => console.log("Audio play failed:", e));
+    }
+}
+
+initAudioPreload();
+
+/* ========================================================
+PROGRESS & SETTINGS
+======================================================== */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
     if (!data) {
@@ -319,7 +381,7 @@ document.getElementById("resetStatsBtn").onclick = () => {
 function startVisualTimer(durationMinutes) {
     const display = document.getElementById("timerDisplay");
     display.style.display = "block";
-    display.classList.remove("final-minute"); // Reset color
+    display.classList.remove("final-minute");
     let timeLeft = durationMinutes * 60;
 
     function updateDisplay() {
@@ -332,11 +394,7 @@ function startVisualTimer(durationMinutes) {
         let mins = Math.floor(timeLeft / 60);
         let secs = timeLeft % 60;
         display.textContent = `Time Remaining: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        
-        // [NEW] Change to red in final 60 seconds
-        if (timeLeft < 60) {
-            display.classList.add("final-minute");
-        }
+        if (timeLeft < 60) display.classList.add("final-minute");
     }
     updateDisplay();
     timerInterval = setInterval(updateDisplay, 1000);
@@ -376,15 +434,6 @@ function nextTrial() {
     let isTarget = (index >= n && sequence[index] === sequence[index-n]);
     results.push({ target: isTarget, responded: false });
     trialTimeout = setTimeout(() => { trialActive = false; index++; nextTrial(); }, isi);
-}
-
-function speak(letter) {
-    window.speechSynthesis.cancel();
-    setTimeout(() => {
-        const u = new SpeechSynthesisUtterance(letter.toLowerCase());
-        if (selectedVoice) u.voice = selectedVoice;
-        u.rate = 0.85; window.speechSynthesis.speak(u);
-    }, 200); 
 }
 
 function registerResponse() {
