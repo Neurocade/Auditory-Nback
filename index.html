@@ -156,7 +156,7 @@ select {
 <div id="app">
 
 <div id="loadingOverlay">
-    <h2>Loading Audio Files...</h2>
+    <h2>Calibrating Audio Engine...</h2>
     <p id="loadingStatus">Please wait a moment.</p>
 </div>
 
@@ -191,7 +191,6 @@ select {
 
 <div id="optionsScreen" style="display:none;">
     <h2>Options</h2>
-    
     <div class="settings-group">
         <label for="sessionLengthSelect">Structured Session Length: </label>
         <select id="sessionLengthSelect">
@@ -200,7 +199,6 @@ select {
             <option value="15">15 Minutes</option>
         </select>
     </div>
-
     <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Statistics</button>
     <br><br>
     <button id="homeBtn" class="secondary-btn">Return to Home Screen</button>
@@ -248,38 +246,39 @@ let results = [];
 let trialActive = false;
 let sessionStartTime = 0;
 let timerMode = false;
-
+let sessionHits = 0, sessionMisses = 0, sessionFalseAlarms = 0;
 let totalSessionAccuracy = [];
-let sessionHits = 0;
-let sessionMisses = 0;
-let sessionFalseAlarms = 0;
 
 /* ========================================================
-PRERECORDED AUDIO SYSTEM (.m4a) & LOADING LOGIC
+HIGH-PERFORMANCE AUDIO ENGINE
+Dual-channel prevents audio clipping/lag during fast transitions
 ======================================================== */
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-const letterAudio = {};
+const audioPool = {};
 let loadedCount = 0;
 
-// Initialize Preloading
 function initAudioPreload() {
     LETTERS.forEach(letter => {
-        const audio = new Audio(`Audio/${letter}.m4a`);
-        audio.preload = "auto";
+        // We create two copies of every sound to handle repeats smoothly
+        audioPool[letter] = [
+            new Audio(`Audio/${letter}.m4a`),
+            new Audio(`Audio/${letter}.m4a`)
+        ];
         
-        // Count when a file is ready
-        audio.oncanplaythrough = () => {
-            if(!letterAudio[letter]) { // Only count once per letter
+        audioPool[letter][0].preload = "auto";
+        audioPool[letter][1].preload = "auto";
+
+        audioPool[letter][0].oncanplaythrough = () => {
+            if (!audioPool[letter].ready) {
+                audioPool[letter].ready = true;
                 loadedCount++;
                 updateLoadingProgress();
             }
-            letterAudio[letter] = audio;
         };
 
-        // Fallback if browser blocks automatic preloading
-        audio.onerror = () => {
-            console.error(`Error loading Audio/${letter}.m4a`);
-            loadedCount++; // Increment anyway to prevent infinite loading screen
+        audioPool[letter][0].onerror = () => {
+            console.error(`Error finding Audio/${letter}.m4a`);
+            loadedCount++;
             updateLoadingProgress();
         };
     });
@@ -287,47 +286,61 @@ function initAudioPreload() {
 
 function updateLoadingProgress() {
     const statusText = document.getElementById("loadingStatus");
-    statusText.textContent = `Prepared ${loadedCount} of 26 files...`;
+    statusText.textContent = `Preparing audio files: ${loadedCount} of 26`;
     
     if (loadedCount >= 26) {
-        setTimeout(() => {
-            document.getElementById("loadingOverlay").style.display = "none";
-        }, 500);
+        // "Warm" the audio engine by playing silent buffers
+        LETTERS.forEach(l => {
+            audioPool[l][0].volume = 0;
+            audioPool[l][0].play().then(() => {
+                audioPool[l][0].pause();
+                audioPool[l][0].volume = 1;
+            }).catch(()=>{});
+        });
+        
+        setTimeout(() => { 
+            document.getElementById("loadingOverlay").style.display = "none"; 
+        }, 1000);
     }
 }
 
+let channelToggle = false; 
 function speak(letter) {
-    const audio = letterAudio[letter.toUpperCase()];
-    if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.play().catch(e => console.log("Audio play failed:", e));
+    const target = letter.toUpperCase();
+    if (!audioPool[target]) return;
+    
+    // Switch between the two channels to allow back-to-back repeats
+    const audio = audioPool[target][channelToggle ? 0 : 1];
+    channelToggle = !channelToggle;
+
+    audio.pause();
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+        playPromise.catch(e => console.log("Audio Playback Error:", e));
     }
 }
 
 initAudioPreload();
 
 /* ========================================================
-PROGRESS & SETTINGS
+STATISTICS & PERSISTENCE
 ======================================================== */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
-    if (!data) {
-        data = {
-            sessions: 0,
-            bestLevel: 1,
-            accuracyHistory: [],
-            bestAccuracyEver: 0,
-            lastCompletedAccuracy: 0,
-            preferredSessionLength: 10
-        };
-    }
-    return data;
+    return data || { 
+        sessions: 0, 
+        bestLevel: 1, 
+        accuracyHistory: [], 
+        bestAccuracyEver: 0, 
+        lastCompletedAccuracy: 0, 
+        preferredSessionLength: 10 
+    };
 }
 
 function saveProgress(level, accuracy) {
     let data = loadProgress();
-    data.sessions += 1;
+    data.sessions++;
     data.bestLevel = Math.max(data.bestLevel, level);
     data.accuracyHistory.push(accuracy);
     data.lastCompletedAccuracy = accuracy;
@@ -343,68 +356,62 @@ function displayProgress() {
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
         Best Level Reached: ${data.bestLevel}-back<br>
-        Last Round Total Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
-        Average Total Accuracy: ${avg}%<br>
-        Best Total Accuracy: ${data.bestAccuracyEver}%<br><br>
-    `;
+        Last Round Accuracy: <span class="stat-box">${data.lastCompletedAccuracy || 0}%</span><br>
+        Average Total Accuracy: ${avg}%<br><br>`;
 
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
     document.getElementById("structuredModeLabel").textContent = `${data.preferredSessionLength}-Minute Structured Session Mode`;
 }
 displayProgress();
 
-/* UI NAVIGATION */
-document.getElementById("optionsBtn").onclick = () => {
-    document.getElementById("menu").style.display = "none";
-    document.getElementById("optionsScreen").style.display = "block";
-    document.getElementById("resetMessage").style.display = "none";
+/* ========================================================
+UI CONTROLS
+======================================================== */
+document.getElementById("optionsBtn").onclick = () => { 
+    document.getElementById("menu").style.display = "none"; 
+    document.getElementById("optionsScreen").style.display = "block"; 
 };
-document.getElementById("homeBtn").onclick = () => {
-    document.getElementById("optionsScreen").style.display = "none";
-    document.getElementById("menu").style.display = "block";
+document.getElementById("homeBtn").onclick = () => { 
+    document.getElementById("optionsScreen").style.display = "none"; 
+    document.getElementById("menu").style.display = "block"; 
 };
 document.getElementById("sessionLengthSelect").onchange = (e) => {
-    let data = loadProgress();
+    let data = loadProgress(); 
     data.preferredSessionLength = parseInt(e.target.value);
-    localStorage.setItem("attentionProgress", JSON.stringify(data));
+    localStorage.setItem("attentionProgress", JSON.stringify(data)); 
     displayProgress();
 };
-document.getElementById("resetStatsBtn").onclick = () => {
-    showModal("Are you sure you want to permanently delete all your training statistics?", function() { 
-        localStorage.removeItem("attentionProgress");
+document.getElementById("resetStatsBtn").onclick = () => { 
+    showModal("Permanently delete all statistics?", () => { 
+        localStorage.removeItem("attentionProgress"); 
         displayProgress(); 
-        document.getElementById("resetMessage").style.display = "block";
-    });
+    }); 
 };
 
-/* TIMER LOGIC */
-function startVisualTimer(durationMinutes) {
+/* ========================================================
+CORE TRAINING ENGINE
+======================================================== */
+function startVisualTimer(minutes) {
     const display = document.getElementById("timerDisplay");
-    display.style.display = "block";
+    display.style.display = "block"; 
     display.classList.remove("final-minute");
-    let timeLeft = durationMinutes * 60;
+    let secondsRemaining = minutes * 60;
 
-    function updateDisplay() {
-        if (timeLeft <= 0) {
-            clearInterval(timerInterval);
-            display.textContent = "Time's Up!";
-            return;
-        }
-        timeLeft--;
-        let mins = Math.floor(timeLeft / 60);
-        let secs = timeLeft % 60;
-        display.textContent = `Time Remaining: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        if (timeLeft < 60) display.classList.add("final-minute");
-    }
-    updateDisplay();
-    timerInterval = setInterval(updateDisplay, 1000);
+    timerInterval = setInterval(() => {
+        secondsRemaining--;
+        let m = Math.floor(secondsRemaining / 60);
+        let s = secondsRemaining % 60;
+        display.textContent = `Time Remaining: ${m}:${s < 10 ? '0' : ''}${s}`;
+        
+        if (secondsRemaining < 60) display.classList.add("final-minute");
+        if (secondsRemaining <= 0) clearInterval(timerInterval);
+    }, 1000);
 }
 
-/* TASK LOGIC */
 document.getElementById("startBtn").onclick = () => {
     n = parseInt(document.getElementById("levelSelect").value);
     document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press the MATCH button when the current letter matches the one <strong>${n}</strong> back.<br><br>Avoid pressing for non-matches.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press MATCH when the current letter is the same as the one <strong>${n}</strong> back.`;
     document.getElementById("instructions").style.display = "block";
 };
 
@@ -413,27 +420,37 @@ document.getElementById("beginTaskBtn").onclick = () => {
     document.getElementById("task").style.display = "block";
     timerMode = document.getElementById("timerMode").checked;
     sessionStartTime = Date.now();
+    
     if (timerMode) startVisualTimer(loadProgress().preferredSessionLength);
-    sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0;
+    
+    sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0; 
     totalSessionAccuracy = [];
     runBlock();
 };
 
 function runBlock() {
-    if (trialTimeout) clearTimeout(trialTimeout);
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
     sequence = buildSequence(trials, n);
-    index = 0; results = [];
+    index = 0; 
+    results = [];
     nextTrial();
 }
 
 function nextTrial() {
     if (index >= sequence.length) { endBlock(); return; }
-    trialActive = true;
+    
+    // Play sound immediately at start of interval
     speak(sequence[index]);
+    
+    trialActive = true;
     let isTarget = (index >= n && sequence[index] === sequence[index-n]);
     results.push({ target: isTarget, responded: false });
-    trialTimeout = setTimeout(() => { trialActive = false; index++; nextTrial(); }, isi);
+
+    trialTimeout = setTimeout(() => { 
+        trialActive = false; 
+        index++; 
+        nextTrial(); 
+    }, isi);
 }
 
 function registerResponse() {
@@ -447,30 +464,42 @@ function registerResponse() {
 document.getElementById("matchBtn").onclick = registerResponse;
 document.onkeydown = (e) => { if (e.code === "Space") { e.preventDefault(); registerResponse(); } };
 
+/* ========================================================
+RESULTS & ADAPTIVE LOGIC
+======================================================== */
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
         let r = results[i];
-        if (r.target) { tTarg++; if (r.responded) bHits++; else sessionMisses++; }
-        else { tNon++; if (r.responded) bFA++; }
+        if (r.target) { 
+            tTarg++; 
+            if (r.responded) bHits++; else sessionMisses++; 
+        } else { 
+            tNon++; 
+            if (r.responded) bFA++; 
+        }
     }
     sessionHits += bHits; sessionFalseAlarms += bFA;
     let bAcc = (tTarg + tNon) === 0 ? 0 : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
     totalSessionAccuracy.push(bAcc);
 
     if (bAcc >= 85 && n < 6) {
-        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
-        return; 
+        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSessionCheck(); });
     } else if (bAcc < 60 && n > 1) {
-        n--; showLevelReminder(); return;
+        n--; showLevelReminder();
+    } else { 
+        continueSessionCheck(); 
     }
-    continueSession();
 }
 
-function continueSession() {
-    let dur = loadProgress().preferredSessionLength * 60000;
-    if (timerMode && (Date.now() - sessionStartTime < dur)) runBlock();
-    else { clearInterval(timerInterval); endSession(); }
+function continueSessionCheck() {
+    let sessionDur = loadProgress().preferredSessionLength * 60000;
+    if (timerMode && (Date.now() - sessionStartTime < sessionDur)) {
+        runBlock();
+    } else { 
+        clearInterval(timerInterval); 
+        endSession(); 
+    }
 }
 
 function endSession() {
@@ -486,40 +515,44 @@ function endSession() {
     <p>Session Total Accuracy: <span class="stat-box">${avg}%</span></p>
     <div style="text-align: left; display: inline-block; background: #222; padding: 20px; border-radius: 10px;">
         <div class="stat-row">🎯 Hits: <span class="stat-box">${sessionHits}</span></div>
-        <div class="stat-row">❌ Misses: <span style="color: #ff9999; font-weight: bold;">${sessionMisses}</span></div>
-        <div class="stat-row">⚠️ False Alarms: <span style="color: #ff9999; font-weight: bold;">${sessionFalseAlarms}</span></div>
+        <div class="stat-row">❌ Misses: <span style="color: #ff9999;">${sessionMisses}</span></div>
+        <div class="stat-row">⚠️ False Alarms: <span style="color: #ff9999;">${sessionFalseAlarms}</span></div>
     </div>
     <br><br><button onclick="location.reload()">Return to Menu</button>`;
 }
 
 function buildSequence(len, nVal) {
-    let s = []; let t = new Set(); let v = len - nVal; let d = Math.round(v * 0.3);
-    while (t.size < d) {
-        let p = Math.floor(Math.random() * v) + nVal;
-        if (!t.has(p-1) || !t.has(p-2)) t.add(p);
+    let s = []; let tIndices = new Set(); let validRange = len - nVal;
+    let targetCount = Math.round(validRange * 0.3);
+    while (tIndices.size < targetCount) {
+        let p = Math.floor(Math.random() * validRange) + nVal;
+        if (!tIndices.has(p-1)) tIndices.add(p);
     }
     for (let i = 0; i < len; i++) {
-        if (i < nVal) s.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]);
-        else if (t.has(i)) s.push(s[i-nVal]);
+        if (i < nVal) s.push(LETTERS[Math.floor(Math.random() * 26)]);
+        else if (tIndices.has(i)) s.push(s[i-nVal]);
         else {
-            let opts = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(x => x !== s[i-nVal]);
+            let opts = LETTERS.filter(x => x !== s[i-nVal]);
             s.push(opts[Math.floor(Math.random() * opts.length)]);
         }
     }
     return s;
 }
 
-function showModal(mText, y, ncb) {
+function showModal(mText, yesAction, noAction) {
     document.getElementById("modalMessage").textContent = mText;
     const m = document.getElementById("customModal"); m.style.display = "flex";
-    document.getElementById("modalYesBtn").onclick = () => { m.style.display = "none"; if(y) y(); };
-    document.getElementById("modalNoBtn").onclick = () => { m.style.display = "none"; if(ncb) ncb(); };
+    document.getElementById("modalYesBtn").onclick = () => { m.style.display = "none"; if(yesAction) yesAction(); };
+    document.getElementById("modalNoBtn").onclick = () => { m.style.display = "none"; if(noAction) noAction(); };
 }
 
 function showLevelReminder() {
-    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
+    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} letters back.`;
     document.getElementById("instructions").style.display = "block";
-    document.getElementById("beginTaskBtn").onclick = () => { document.getElementById("instructions").style.display = "none"; runBlock(); };
+    document.getElementById("beginTaskBtn").onclick = () => { 
+        document.getElementById("instructions").style.display = "none"; 
+        runBlock(); 
+    };
 }
 </script>
 </body>
