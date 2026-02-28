@@ -3,13 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <title>Attention Training Program</title>
-
 <style>
 /* ========================================================
 SENIOR FRIENDLY DESIGN
 Large fonts, high contrast, low clutter
 ======================================================== */
-
 body {
     font-family: Arial, sans-serif;
     background: #111;
@@ -18,7 +16,6 @@ body {
     justify-content: center;
     padding-top: 30px;
 }
-
 #app {
     width: 850px;
     background: #1e1e1e;
@@ -28,10 +25,8 @@ body {
     position: relative;
     min-height: 500px;
 }
-
 h1 { font-size: 34px; }
 h2 { font-size: 26px; }
-
 button {
     font-size: 22px;
     padding: 14px 24px;
@@ -42,16 +37,13 @@ button {
     background: #444;
     color: white;
 }
-
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
-
 .secondary-btn {
     font-size: 18px;
     padding: 10px 20px;
     background: #555;
     margin-top: 20px;
 }
-
 #matchBtn {
     font-size: 30px;
     background: #4caf50;
@@ -61,13 +53,11 @@ button {
     border-radius: 10px;
     padding: 20px 40px;
 }
-
 #matchBtn.pressed {
     background: #2ecc71;
     transform: scale(0.95);
     transition: transform 0.1s ease, background 0.1s ease;
 }
-
 select {
     font-size: 20px;
     padding: 8px;
@@ -75,18 +65,15 @@ select {
     background: #333;
     color: white;
 }
-
 #fixation {
     font-size: 120px;
     margin: 30px 0;
     color: #bbb;
 }
-
 #results {
     display: none;
     font-size: 22px;
 }
-
 #instructionsBox {
     background: #222;
     padding: 20px;
@@ -95,7 +82,6 @@ select {
     margin-top: 20px;
     text-align: left;
 }
-
 .settings-group {
     border: 1px solid #444;
     padding: 15px;
@@ -103,10 +89,8 @@ select {
     border-radius: 10px;
     background: #252525;
 }
-
 .stat-box { color: #FFD700; font-weight: bold; }
 .stat-row { font-size: 20px; margin: 5px 0; color: #ddd; }
-
 /* TIMER DISPLAY */
 #timerDisplay {
     font-size: 24px;
@@ -123,7 +107,6 @@ select {
     border-top: none;
     transition: color 0.3s ease, background 0.3s ease;
 }
-
 /* [NEW] Final Minute Alert Class */
 #timerDisplay.final-minute {
     color: #ff4444;
@@ -133,71 +116,76 @@ select {
 }
 </style>
 </head>
-
 <body>
 <div id="app">
+    <div id="timerDisplay" style="display:none;">Time Remaining: 10:00</div>
+    <h1>Attention Training</h1>
+    <div id="menu">
+        <div id="progressSummary"></div>
 
-<div id="timerDisplay" style="display:none;">Time Remaining: 10:00</div>
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="timerMode">
+                <span id="structuredModeLabel">Structured Session Mode</span>
+            </label>
+            <br><br>
+            <label for="levelSelect">Select Starting Level: </label>
+            <select id="levelSelect">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+            </select>
+        </div>
 
-<h1>Attention Training</h1>
+        <!-- === NEW: Voice selection UI === -->
+        <div class="settings-group">
+            <label for="voiceSelect">Voice (for letters): </label>
+            <select id="voiceSelect">
+                <!-- Populated dynamically with available SpeechSynthesis voices -->
+            </select>
+            <p style="font-size:16px;color:#ccc;margin-top:8px;">
+                If the voice sounds too digital, try a different option in this list.
+            </p>
+        </div>
+        <!-- === END NEW === -->
 
-<div id="menu">
-    <div id="progressSummary"></div>
-
-    <div class="settings-group">
-        <label>
-        <input type="checkbox" id="timerMode">
-          <span id="structuredModeLabel">Structured Session Mode</span>
-        </label>
+        <button id="startBtn">Start Training</button>
         <br><br>
-        <label for="levelSelect">Select Starting Level: </label>
-        <select id="levelSelect">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-        </select>
+        <button id="optionsBtn" class="secondary-btn">Options</button>
     </div>
 
-    <button id="startBtn">Start Training</button>
-    <br><br>
-    <button id="optionsBtn" class="secondary-btn">Options</button>
-</div>
-
-<div id="optionsScreen" style="display:none;">
-    <h2>Options</h2>
-    
-    <div class="settings-group">
-        <label for="sessionLengthSelect">Structured Session Length: </label>
-        <select id="sessionLengthSelect">
-            <option value="5">5 Minutes</option>
-            <option value="10">10 Minutes</option>
-            <option value="15">15 Minutes</option>
-        </select>
+    <div id="optionsScreen" style="display:none;">
+        <h2>Options</h2>
+        <div class="settings-group">
+            <label for="sessionLengthSelect">Structured Session Length: </label>
+            <select id="sessionLengthSelect">
+                <option value="5">5 Minutes</option>
+                <option value="10">10 Minutes</option>
+                <option value="15">15 Minutes</option>
+            </select>
+        </div>
+        <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Statistics</button>
+        <br><br>
+        <button id="homeBtn" class="secondary-btn">Return to Home Screen</button>
+        <p id="resetMessage" style="color: #4caf50; display:none; margin-top: 20px; font-size: 20px;">Statistics successfully reset.</p>
     </div>
 
-    <button id="resetStatsBtn" style="background: #f44336; color: white;">Reset All Statistics</button>
-    <br><br>
-    <button id="homeBtn" class="secondary-btn">Return to Home Screen</button>
-    <p id="resetMessage" style="color: #4caf50; display:none; margin-top: 20px; font-size: 20px;">Statistics successfully reset.</p>
-</div>
+    <div id="instructions" style="display:none;">
+        <div id="instructionsBox"></div>
+        <br>
+        <button id="beginTaskBtn">Begin Task</button>
+    </div>
 
-<div id="instructions" style="display:none;">
-    <div id="instructionsBox"></div>
-    <br>
-    <button id="beginTaskBtn">Begin Task</button>
-</div>
+    <div id="task" style="display:none;">
+        <h2 id="levelLabel"></h2>
+        <div id="fixation">+</div>
+        <button id="matchBtn">MATCH</button>
+    </div>
 
-<div id="task" style="display:none;">
-    <h2 id="levelLabel"></h2>
-    <div id="fixation">+</div>
-    <button id="matchBtn">MATCH</button>
-</div>
-
-<div id="results"></div>
-
+    <div id="results"></div>
 </div>
 
 <div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:1000;">
@@ -208,46 +196,116 @@ select {
         <button id="modalNoBtn" style="background:#f44336; color:white;">No</button>
     </div>
 </div>
-    
-<script>
 
-/* GLOBAL VARIABLES */
-let trialTimeout = null;  
-let timerInterval = null; 
-let n = 1;                
-let isi = 2500;           
-let trials = 30;          
+<script>
+/* ========================================================
+   GLOBAL VARIABLES
+======================================================== */
+let trialTimeout = null;
+let timerInterval = null;
+let n = 1;
+let isi = 2500;
+let trials = 30;
 let sequence = [];
 let index = 0;
 let results = [];
 let trialActive = false;
 let sessionStartTime = 0;
 let timerMode = false;
-
 let totalSessionAccuracy = [];
 let sessionHits = 0;
 let sessionMisses = 0;
 let sessionFalseAlarms = 0;
 
-/* SPEECH LOGIC */
+/* ========================================================
+   SPEECH / VOICE LOGIC
+   NOTE FOR COLLABORATORS:
+   - We now use a <select id="voiceSelect"> to let users choose
+     from the built-in SpeechSynthesis voices.
+   - This is mainly to improve audio quality on Windows, where
+     the default voice can sound very digital/robotic.
+   - We store the chosen voice index in localStorage so the app
+     remembers the user’s preference between sessions.
+======================================================== */
+
 let selectedVoice = null;
-function loadVoices() {
+
+// === NEW: Persistent voice index key ===
+const VOICE_STORAGE_KEY = "attentionTrainingPreferredVoiceIndex";
+
+// === NEW: Populate voice dropdown with available voices ===
+function populateVoiceList() {
     const voices = window.speechSynthesis.getVoices();
-    selectedVoice = voices.find(v => v.name.includes("Samantha")) || 
-                    voices.find(v => v.lang.includes("en-US")) || 
-                    voices[0];
+    const voiceSelect = document.getElementById("voiceSelect");
+    if (!voiceSelect) return;
+
+    voiceSelect.innerHTML = "";
+
+    voices.forEach((voice, i) => {
+        const option = document.createElement("option");
+        option.value = i;
+        option.textContent = `${voice.name} (${voice.lang})${voice.default ? " [default]" : ""}`;
+        voiceSelect.appendChild(option);
+    });
+
+    // Try to restore previously selected voice
+    const savedIndex = parseInt(localStorage.getItem(VOICE_STORAGE_KEY), 10);
+    if (!isNaN(savedIndex) && voices[savedIndex]) {
+        voiceSelect.value = savedIndex;
+        selectedVoice = voices[savedIndex];
+    } else if (voices.length > 0) {
+        // Fallback: pick default or first en-US, then first voice
+        let preferred =
+            voices.find(v => v.default) ||
+            voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) ||
+            voices[0];
+
+        selectedVoice = preferred;
+        const index = voices.indexOf(preferred);
+        if (index >= 0) voiceSelect.value = index;
+    }
 }
-if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
+
+// === Updated loadVoices to call populateVoiceList ===
+function loadVoices() {
+    populateVoiceList();
+}
+
+// Some browsers (esp. Chrome) load voices asynchronously
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = loadVoices;
+}
 loadVoices();
 
-/* PREVENT AUDIO CUTOFF */
+// === NEW: Handle voice selection change by user ===
+document.addEventListener("DOMContentLoaded", () => {
+    const voiceSelect = document.getElementById("voiceSelect");
+    if (voiceSelect) {
+        voiceSelect.addEventListener("change", (e) => {
+            const voices = window.speechSynthesis.getVoices();
+            const index = parseInt(e.target.value, 10);
+            if (!isNaN(index) && voices[index]) {
+                selectedVoice = voices[index];
+                localStorage.setItem(VOICE_STORAGE_KEY, String(index));
+            }
+        });
+    }
+});
+
+/* PREVENT AUDIO CUTOFF (can be removed if causing issues)
+   This hack occasionally keeps TTS "warm" but may not be
+   necessary on all browsers. */
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
-        const p = new SpeechSynthesisUtterance(""); p.volume = 0; window.speechSynthesis.speak(p);
+        const p = new SpeechSynthesisUtterance("");
+        p.volume = 0;
+        window.speechSynthesis.speak(p);
     }
 }, 5000);
 
-/* PROGRESS & SETTINGS */
+/* ========================================================
+   PROGRESS & SETTINGS
+======================================================== */
 function loadProgress() {
     let data = JSON.parse(localStorage.getItem("attentionProgress"));
     if (!data) {
@@ -275,8 +333,10 @@ function saveProgress(level, accuracy) {
 
 function displayProgress() {
     let data = loadProgress();
-    let avg = data.accuracyHistory.length > 0 ? Math.round(data.accuracyHistory.reduce((a,b)=>a+b,0) / data.accuracyHistory.length) : 0;
-    
+    let avg = data.accuracyHistory.length > 0
+        ? Math.round(data.accuracyHistory.reduce((a,b)=>a+b,0) / data.accuracyHistory.length)
+        : 0;
+
     document.getElementById("progressSummary").innerHTML = `
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
@@ -287,39 +347,48 @@ function displayProgress() {
     `;
 
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
-    document.getElementById("structuredModeLabel").textContent = `${data.preferredSessionLength}-Minute Structured Session Mode`;
+    document.getElementById("structuredModeLabel").textContent =
+        `${data.preferredSessionLength}-Minute Structured Session Mode`;
 }
 displayProgress();
 
-/* UI NAVIGATION */
+/* ========================================================
+   UI NAVIGATION
+======================================================== */
 document.getElementById("optionsBtn").onclick = () => {
     document.getElementById("menu").style.display = "none";
     document.getElementById("optionsScreen").style.display = "block";
     document.getElementById("resetMessage").style.display = "none";
 };
+
 document.getElementById("homeBtn").onclick = () => {
     document.getElementById("optionsScreen").style.display = "none";
     document.getElementById("menu").style.display = "block";
 };
+
 document.getElementById("sessionLengthSelect").onchange = (e) => {
     let data = loadProgress();
     data.preferredSessionLength = parseInt(e.target.value);
     localStorage.setItem("attentionProgress", JSON.stringify(data));
     displayProgress();
 };
+
 document.getElementById("resetStatsBtn").onclick = () => {
-    showModal("Are you sure you want to permanently delete all your training statistics?", function() { 
+    showModal("Are you sure you want to permanently delete all your training statistics?", function() {
         localStorage.removeItem("attentionProgress");
-        displayProgress(); 
+        displayProgress();
         document.getElementById("resetMessage").style.display = "block";
     });
 };
 
-/* TIMER LOGIC */
+/* ========================================================
+   TIMER LOGIC
+======================================================== */
 function startVisualTimer(durationMinutes) {
     const display = document.getElementById("timerDisplay");
     display.style.display = "block";
     display.classList.remove("final-minute"); // Reset color
+
     let timeLeft = durationMinutes * 60;
 
     function updateDisplay() {
@@ -332,32 +401,39 @@ function startVisualTimer(durationMinutes) {
         let mins = Math.floor(timeLeft / 60);
         let secs = timeLeft % 60;
         display.textContent = `Time Remaining: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        
-        // [NEW] Change to red in final 60 seconds
         if (timeLeft < 60) {
             display.classList.add("final-minute");
         }
     }
+
     updateDisplay();
     timerInterval = setInterval(updateDisplay, 1000);
 }
 
-/* TASK LOGIC */
+/* ========================================================
+   TASK LOGIC
+======================================================== */
 document.getElementById("startBtn").onclick = () => {
     n = parseInt(document.getElementById("levelSelect").value);
     document.getElementById("menu").style.display = "none";
-    document.getElementById("instructionsBox").innerHTML = `<strong>Instructions:</strong><br><br>Listen carefully and press the MATCH button when the current letter matches the one <strong>${n}</strong> back.<br><br>Avoid pressing for non-matches.`;
+    document.getElementById("instructionsBox").innerHTML =
+        `<strong>Instructions:</strong><br><br>Listen carefully and press the MATCH button when the current letter matches the one <strong>${n}</strong> back.<br><br>Avoid pressing for non-matches.`;
     document.getElementById("instructions").style.display = "block";
 };
 
 document.getElementById("beginTaskBtn").onclick = () => {
     document.getElementById("instructions").style.display = "none";
     document.getElementById("task").style.display = "block";
+
     timerMode = document.getElementById("timerMode").checked;
     sessionStartTime = Date.now();
     if (timerMode) startVisualTimer(loadProgress().preferredSessionLength);
-    sessionHits = 0; sessionMisses = 0; sessionFalseAlarms = 0;
+
+    sessionHits = 0;
+    sessionMisses = 0;
+    sessionFalseAlarms = 0;
     totalSessionAccuracy = [];
+
     runBlock();
 };
 
@@ -365,26 +441,39 @@ function runBlock() {
     if (trialTimeout) clearTimeout(trialTimeout);
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
     sequence = buildSequence(trials, n);
-    index = 0; results = [];
+    index = 0;
+    results = [];
     nextTrial();
 }
 
 function nextTrial() {
-    if (index >= sequence.length) { endBlock(); return; }
+    if (index >= sequence.length) {
+        endBlock();
+        return;
+    }
     trialActive = true;
     speak(sequence[index]);
     let isTarget = (index >= n && sequence[index] === sequence[index-n]);
     results.push({ target: isTarget, responded: false });
-    trialTimeout = setTimeout(() => { trialActive = false; index++; nextTrial(); }, isi);
+
+    trialTimeout = setTimeout(() => {
+        trialActive = false;
+        index++;
+        nextTrial();
+    }, isi);
 }
 
+// === UPDATED: speak() now uses selectedVoice and tuned params ===
 function speak(letter) {
     window.speechSynthesis.cancel();
     setTimeout(() => {
         const u = new SpeechSynthesisUtterance(letter.toLowerCase());
         if (selectedVoice) u.voice = selectedVoice;
-        u.rate = 0.85; window.speechSynthesis.speak(u);
-    }, 200); 
+        u.rate = 0.9;      // Slightly slower than default, but not too robotic
+        u.pitch = 1.0;     // Neutral pitch; adjust 0.8–1.2 if desired
+        u.volume = 1.0;    // Ensure full volume
+        window.speechSynthesis.speak(u);
+    }, 200);
 }
 
 function registerResponse() {
@@ -396,39 +485,64 @@ function registerResponse() {
 }
 
 document.getElementById("matchBtn").onclick = registerResponse;
-document.onkeydown = (e) => { if (e.code === "Space") { e.preventDefault(); registerResponse(); } };
+document.onkeydown = (e) => {
+    if (e.code === "Space") {
+        e.preventDefault();
+        registerResponse();
+    }
+};
 
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
         let r = results[i];
-        if (r.target) { tTarg++; if (r.responded) bHits++; else sessionMisses++; }
-        else { tNon++; if (r.responded) bFA++; }
+        if (r.target) {
+            tTarg++;
+            if (r.responded) bHits++;
+            else sessionMisses++;
+        } else {
+            tNon++;
+            if (r.responded) bFA++;
+        }
     }
-    sessionHits += bHits; sessionFalseAlarms += bFA;
-    let bAcc = (tTarg + tNon) === 0 ? 0 : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
+    sessionHits += bHits;
+    sessionFalseAlarms += bFA;
+
+    let bAcc = (tTarg + tNon) === 0
+        ? 0
+        : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
+
     totalSessionAccuracy.push(bAcc);
 
     if (bAcc >= 85 && n < 6) {
         showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
-        return; 
+        return;
     } else if (bAcc < 60 && n > 1) {
-        n--; showLevelReminder(); return;
+        n--;
+        showLevelReminder();
+        return;
     }
+
     continueSession();
 }
 
 function continueSession() {
     let dur = loadProgress().preferredSessionLength * 60000;
-    if (timerMode && (Date.now() - sessionStartTime < dur)) runBlock();
-    else { clearInterval(timerInterval); endSession(); }
+    if (timerMode && (Date.now() - sessionStartTime < dur)) {
+        runBlock();
+    } else {
+        clearInterval(timerInterval);
+        endSession();
+    }
 }
 
 function endSession() {
     document.getElementById("task").style.display = "none";
     document.getElementById("timerDisplay").style.display = "none";
+
     let div = document.getElementById("results");
     div.style.display = "block";
+
     let avg = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
     saveProgress(n, avg);
 
@@ -443,16 +557,26 @@ function endSession() {
     <br><br><button onclick="location.reload()">Return to Menu</button>`;
 }
 
+/* ========================================================
+   SEQUENCE GENERATION
+======================================================== */
 function buildSequence(len, nVal) {
-    let s = []; let t = new Set(); let v = len - nVal; let d = Math.round(v * 0.3);
+    let s = [];
+    let t = new Set();
+    let v = len - nVal;
+    let d = Math.round(v * 0.3);
+
     while (t.size < d) {
         let p = Math.floor(Math.random() * v) + nVal;
         if (!t.has(p-1) || !t.has(p-2)) t.add(p);
     }
+
     for (let i = 0; i < len; i++) {
-        if (i < nVal) s.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]);
-        else if (t.has(i)) s.push(s[i-nVal]);
-        else {
+        if (i < nVal) {
+            s.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]);
+        } else if (t.has(i)) {
+            s.push(s[i-nVal]);
+        } else {
             let opts = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").filter(x => x !== s[i-nVal]);
             s.push(opts[Math.floor(Math.random() * opts.length)]);
         }
@@ -460,17 +584,32 @@ function buildSequence(len, nVal) {
     return s;
 }
 
+/* ========================================================
+   MODAL HELPERS
+======================================================== */
 function showModal(mText, y, ncb) {
     document.getElementById("modalMessage").textContent = mText;
-    const m = document.getElementById("customModal"); m.style.display = "flex";
-    document.getElementById("modalYesBtn").onclick = () => { m.style.display = "none"; if(y) y(); };
-    document.getElementById("modalNoBtn").onclick = () => { m.style.display = "none"; if(ncb) ncb(); };
+    const m = document.getElementById("customModal");
+    m.style.display = "flex";
+
+    document.getElementById("modalYesBtn").onclick = () => {
+        m.style.display = "none";
+        if (y) y();
+    };
+    document.getElementById("modalNoBtn").onclick = () => {
+        m.style.display = "none";
+        if (ncb) ncb();
+    };
 }
 
 function showLevelReminder() {
-    document.getElementById("instructionsBox").innerHTML = `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
+    document.getElementById("instructionsBox").innerHTML =
+        `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
     document.getElementById("instructions").style.display = "block";
-    document.getElementById("beginTaskBtn").onclick = () => { document.getElementById("instructions").style.display = "none"; runBlock(); };
+    document.getElementById("beginTaskBtn").onclick = () => {
+        document.getElementById("instructions").style.display = "none";
+        runBlock();
+    };
 }
 </script>
 </body>
