@@ -147,8 +147,17 @@ select {
                 <!-- Populated dynamically with available SpeechSynthesis voices -->
             </select>
             <p style="font-size:16px;color:#ccc;margin-top:8px;">
-                If using Windows and voice is unclear, try selecting one of the following: “Microsoft Ava Online (Natural)-English”,  
-                "Microsoft Aria Online (Natural)-English", "Microsoft Jenny Online (Natural)-English", "Microsoft Michelle Online (Natural)-English" 
+                If using Windows and voice is unclear, try selecting one of the following: 
+                If browser is Microsoft Edge:
+                “Microsoft Ava Online (Natural)-English”,  
+                "Microsoft Aria Online (Natural)-English", 
+                "Microsoft Jenny Online (Natural)-English", 
+                "Microsoft Michelle Online (Natural)-English" 
+
+                If using Chrome:
+                “Google US English”
+                
+                You can change this anytime.
             </p>
         </div>
 
@@ -222,18 +231,32 @@ let sessionFalseAlarms = 0;
    NOTE FOR COLLABORATORS:
    - We use SpeechSynthesis and a <select id="voiceSelect">
      so users can choose a voice.
-   - On Windows, we *prefer* (in this order) “Microsoft Ava”,
-     then Aria, Jenny, then Michelle, if present.
-   - We store the selected voice index in localStorage so
-     it persists between sessions.
+   - Default choice depends on both OS and browser:
+       * Windows + Edge: try Microsoft Ava -> Aria -> Jenny -> Michelle.
+       * Windows + Chrome: try "Google US English".
+       * Otherwise: browser default -> en-US -> first voice.
+   - User overrides are saved in localStorage and take priority.
 ======================================================== */
 
 let selectedVoice = null;
 const VOICE_STORAGE_KEY = "attentionTrainingPreferredVoiceIndex";
 
-// Simple platform check for Windows
 function isWindowsPlatform() {
     return /win/i.test(navigator.userAgent || "");
+}
+
+// Very simple browser checks using userAgent
+function isEdgeBrowser() {
+    const ua = navigator.userAgent || "";
+    // "Edg" is used in Chromium-based Edge UA strings
+    return ua.includes("Edg/");
+}
+
+function isChromeBrowser() {
+    const ua = navigator.userAgent || "";
+    // Many Chromium-based browsers include "Chrome", but not all have Google voices.
+    // For our purpose, we focus on standard Chrome; exclude Edge by checking isEdgeBrowser().
+    return ua.includes("Chrome/") && !isEdgeBrowser();
 }
 
 function populateVoiceList() {
@@ -261,8 +284,12 @@ function populateVoiceList() {
     // 2. No saved voice: choose a good default.
     let preferred = null;
 
-    // On Windows, try Microsoft Ava, then Aria, Jenny, Michelle
-    if (isWindowsPlatform()) {
+    const onWindows = isWindowsPlatform();
+    const onEdge = isEdgeBrowser();
+    const onChrome = isChromeBrowser();
+
+    // Windows + Edge: prefer Microsoft Ava, then Aria, Jenny, Michelle
+    if (onWindows && onEdge) {
         const priorityNames = ["ava", "aria", "jenny", "michelle"];
         for (const name of priorityNames) {
             preferred = voices.find(v =>
@@ -272,17 +299,24 @@ function populateVoiceList() {
         }
     }
 
-    // If not set yet, fallback to browser default voice
+    // Windows + Chrome: prefer "Google US English" if present
+    if (!preferred && onWindows && onChrome) {
+        preferred = voices.find(v =>
+            v.name && v.name.toLowerCase().includes("google us english")
+        ) || null;
+    }
+
+    // If still not set, fallback to browser default voice
     if (!preferred) {
         preferred = voices.find(v => v.default) || null;
     }
 
-    // Next, try en-US
+    // Then try en-US
     if (!preferred) {
         preferred = voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) || null;
     }
 
-    // Fallback to first voice
+    // Finally, fallback to first voice
     if (!preferred && voices.length > 0) {
         preferred = voices[0];
     }
