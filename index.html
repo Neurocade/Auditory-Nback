@@ -107,7 +107,7 @@ select {
     border-top: none;
     transition: color 0.3s ease, background 0.3s ease;
 }
-/* [NEW] Final Minute Alert Class */
+/* Final Minute Alert Class */
 #timerDisplay.final-minute {
     color: #ff4444;
     background: #441111;
@@ -140,17 +140,17 @@ select {
             </select>
         </div>
 
-        <!-- === NEW: Voice selection UI === -->
+        <!-- Voice selection UI -->
         <div class="settings-group">
             <label for="voiceSelect">Voice (for letters): </label>
             <select id="voiceSelect">
                 <!-- Populated dynamically with available SpeechSynthesis voices -->
             </select>
             <p style="font-size:16px;color:#ccc;margin-top:8px;">
-                If the voice sounds too digital, try a different option in this list.
+                On Windows, this will try “Microsoft Ava”, then Aria, Jenny, Michelle by default if available.
+                If it still sounds too digital, try another option.
             </p>
         </div>
-        <!-- === END NEW === -->
 
         <button id="startBtn">Start Training</button>
         <br><br>
@@ -220,20 +220,22 @@ let sessionFalseAlarms = 0;
 /* ========================================================
    SPEECH / VOICE LOGIC
    NOTE FOR COLLABORATORS:
-   - We now use a <select id="voiceSelect"> to let users choose
-     from the built-in SpeechSynthesis voices.
-   - This is mainly to improve audio quality on Windows, where
-     the default voice can sound very digital/robotic.
-   - We store the chosen voice index in localStorage so the app
-     remembers the user’s preference between sessions.
+   - We use SpeechSynthesis and a <select id="voiceSelect">
+     so users can choose a voice.
+   - On Windows, we *prefer* (in this order) “Microsoft Ava”,
+     then Aria, Jenny, then Michelle, if present.
+   - We store the selected voice index in localStorage so
+     it persists between sessions.
 ======================================================== */
 
 let selectedVoice = null;
-
-// === NEW: Persistent voice index key ===
 const VOICE_STORAGE_KEY = "attentionTrainingPreferredVoiceIndex";
 
-// === NEW: Populate voice dropdown with available voices ===
+// Simple platform check for Windows
+function isWindowsPlatform() {
+    return /win/i.test(navigator.userAgent || "");
+}
+
 function populateVoiceList() {
     const voices = window.speechSynthesis.getVoices();
     const voiceSelect = document.getElementById("voiceSelect");
@@ -248,36 +250,63 @@ function populateVoiceList() {
         voiceSelect.appendChild(option);
     });
 
-    // Try to restore previously selected voice
+    // 1. Try to restore previously selected voice from localStorage
     const savedIndex = parseInt(localStorage.getItem(VOICE_STORAGE_KEY), 10);
     if (!isNaN(savedIndex) && voices[savedIndex]) {
         voiceSelect.value = savedIndex;
         selectedVoice = voices[savedIndex];
-    } else if (voices.length > 0) {
-        // Fallback: pick default or first en-US, then first voice
-        let preferred =
-            voices.find(v => v.default) ||
-            voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) ||
-            voices[0];
+        return;
+    }
 
+    // 2. No saved voice: choose a good default.
+    let preferred = null;
+
+    // On Windows, try Microsoft Ava, then Aria, Jenny, Michelle
+    if (isWindowsPlatform()) {
+        const priorityNames = ["ava", "aria", "jenny", "michelle"];
+        for (const name of priorityNames) {
+            preferred = voices.find(v =>
+                v.name && v.name.toLowerCase().includes("microsoft " + name)
+            );
+            if (preferred) break;
+        }
+    }
+
+    // If not set yet, fallback to browser default voice
+    if (!preferred) {
+        preferred = voices.find(v => v.default) || null;
+    }
+
+    // Next, try en-US
+    if (!preferred) {
+        preferred = voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) || null;
+    }
+
+    // Fallback to first voice
+    if (!preferred && voices.length > 0) {
+        preferred = voices[0];
+    }
+
+    if (preferred) {
         selectedVoice = preferred;
         const index = voices.indexOf(preferred);
-        if (index >= 0) voiceSelect.value = index;
+        if (index >= 0) {
+            voiceSelect.value = index;
+        }
     }
 }
 
-// === Updated loadVoices to call populateVoiceList ===
 function loadVoices() {
     populateVoiceList();
 }
 
-// Some browsers (esp. Chrome) load voices asynchronously
+// Asynchronous voice loading in many browsers
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = loadVoices;
 }
 loadVoices();
 
-// === NEW: Handle voice selection change by user ===
+// Update selectedVoice when user changes dropdown
 document.addEventListener("DOMContentLoaded", () => {
     const voiceSelect = document.getElementById("voiceSelect");
     if (voiceSelect) {
@@ -292,9 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-/* PREVENT AUDIO CUTOFF (can be removed if causing issues)
-   This hack occasionally keeps TTS "warm" but may not be
-   necessary on all browsers. */
+/* PREVENT AUDIO CUTOFF (can be removed if causing issues) */
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
         const p = new SpeechSynthesisUtterance("");
@@ -463,15 +490,15 @@ function nextTrial() {
     }, isi);
 }
 
-// === UPDATED: speak() now uses selectedVoice and tuned params ===
+// Speech function using selectedVoice
 function speak(letter) {
     window.speechSynthesis.cancel();
     setTimeout(() => {
         const u = new SpeechSynthesisUtterance(letter.toLowerCase());
         if (selectedVoice) u.voice = selectedVoice;
-        u.rate = 0.9;      // Slightly slower than default, but not too robotic
-        u.pitch = 1.0;     // Neutral pitch; adjust 0.8–1.2 if desired
-        u.volume = 1.0;    // Ensure full volume
+        u.rate = 0.9;      // Slightly slower than default
+        u.pitch = 1.0;     // Neutral pitch
+        u.volume = 1.0;    // Full volume
         window.speechSynthesis.speak(u);
     }, 200);
 }
