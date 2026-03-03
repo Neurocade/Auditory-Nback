@@ -38,6 +38,14 @@ button {
     color: white;
 }
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
+
+/* Choose Voice button styled same as start */
+#chooseVoiceBtn {
+    background: #4caf50;
+    color: black;
+    font-weight: bold;
+}
+
 .secondary-btn {
     font-size: 18px;
     padding: 10px 20px;
@@ -120,9 +128,10 @@ select {
 <div id="app">
     <div id="timerDisplay" style="display:none;">Time Remaining: 10:00</div>
     <h1>Attention Training</h1>
+
+    <!-- ===================== HOME / MENU ===================== -->
     <div id="menu">
         <div id="progressSummary"></div>
-
         <div class="settings-group">
             <label>
                 <input type="checkbox" id="timerMode">
@@ -140,32 +149,18 @@ select {
             </select>
         </div>
 
-        <!-- Voice selection UI -->
-        <div class="settings-group">
-            <label for="voiceSelect">Voice (for letters): </label>
-            <select id="voiceSelect">
-                <!-- Populated dynamically with available SpeechSynthesis voices -->
-            </select>
-            <p style="font-size:16px;color:#ccc;margin-top:8px;">
-                If using Windows and voice is unclear, try selecting one of the following: 
-                If browser is Microsoft Edge:
-                “Microsoft Ava Online (Natural)-English”,  
-                "Microsoft Aria Online (Natural)-English", 
-                "Microsoft Jenny Online (Natural)-English", 
-                "Microsoft Michelle Online (Natural)-English" 
+        <p style="font-size:18px;color:#ccc;margin-top:8px;">
+            Difficulty hearing the letters? Try choosing a new voice.
+        </p>
+        <button id="chooseVoiceBtn">Choose Voice</button>
 
-                If using Chrome:
-                “Google US English”
-                
-                You can change this anytime.
-            </p>
-        </div>
-
+        <br><br>
         <button id="startBtn">Start Training</button>
         <br><br>
         <button id="optionsBtn" class="secondary-btn">Options</button>
     </div>
 
+    <!-- ===================== OPTIONS SCREEN ===================== -->
     <div id="optionsScreen" style="display:none;">
         <h2>Options</h2>
         <div class="settings-group">
@@ -182,18 +177,46 @@ select {
         <p id="resetMessage" style="color: #4caf50; display:none; margin-top: 20px; font-size: 20px;">Statistics successfully reset.</p>
     </div>
 
+    <!-- ===================== VOICE SETTINGS PAGE ===================== -->
+    <div id="voiceSettingsScreen" style="display:none;">
+        <h2>Voice Settings</h2>
+        <div class="settings-group">
+            <label for="voiceSelect">Voice (for letters): </label>
+            <select id="voiceSelect">
+                <!-- Populated dynamically with available SpeechSynthesis voices -->
+            </select>
+
+            <!-- NEW: Test Voice button -->
+            <br>
+            <button id="testVoiceBtn" class="secondary-btn">Test Voice</button>
+
+            <!-- Instructions text (unchanged) -->
+            <p style="font-size:16px;color:#ccc;margin-top:8px;">
+                If using Windows and voice is unclear, try selecting one of the following:
+                If browser is Microsoft Edge:
+                “Microsoft Ava Online (Natural)-English”,  
+                "Microsoft Aria Online (Natural)-English",
+                "Microsoft Jenny Online (Natural)-English",
+                "Microsoft Michelle Online (Natural)-English"
+                If using Chrome:
+                “Google US English”
+                You can change this anytime.
+            </p>
+        </div>
+        <button id="voiceBackBtn" class="secondary-btn">Back</button>
+    </div>
+
+    <!-- ===================== INSTRUCTIONS & TASK ===================== -->
     <div id="instructions" style="display:none;">
         <div id="instructionsBox"></div>
         <br>
         <button id="beginTaskBtn">Begin Task</button>
     </div>
-
     <div id="task" style="display:none;">
         <h2 id="levelLabel"></h2>
         <div id="fixation">+</div>
         <button id="matchBtn">MATCH</button>
     </div>
-
     <div id="results"></div>
 </div>
 
@@ -228,34 +251,19 @@ let sessionFalseAlarms = 0;
 
 /* ========================================================
    SPEECH / VOICE LOGIC
-   NOTE FOR COLLABORATORS:
-   - We use SpeechSynthesis and a <select id="voiceSelect">
-     so users can choose a voice.
-   - Default choice depends on both OS and browser:
-       * Windows + Edge: try Microsoft Ava -> Aria -> Jenny -> Michelle.
-       * Windows + Chrome: try "Google US English".
-       * Otherwise: browser default -> en-US -> first voice.
-   - User overrides are saved in localStorage and take priority.
 ======================================================== */
-
 let selectedVoice = null;
 const VOICE_STORAGE_KEY = "attentionTrainingPreferredVoiceIndex";
 
 function isWindowsPlatform() {
     return /win/i.test(navigator.userAgent || "");
 }
-
-// Very simple browser checks using userAgent
 function isEdgeBrowser() {
     const ua = navigator.userAgent || "";
-    // "Edg" is used in Chromium-based Edge UA strings
     return ua.includes("Edg/");
 }
-
 function isChromeBrowser() {
     const ua = navigator.userAgent || "";
-    // Many Chromium-based browsers include "Chrome", but not all have Google voices.
-    // For our purpose, we focus on standard Chrome; exclude Edge by checking isEdgeBrowser().
     return ua.includes("Chrome/") && !isEdgeBrowser();
 }
 
@@ -265,7 +273,6 @@ function populateVoiceList() {
     if (!voiceSelect) return;
 
     voiceSelect.innerHTML = "";
-
     voices.forEach((voice, i) => {
         const option = document.createElement("option");
         option.value = i;
@@ -283,12 +290,10 @@ function populateVoiceList() {
 
     // 2. No saved voice: choose a good default.
     let preferred = null;
-
     const onWindows = isWindowsPlatform();
     const onEdge = isEdgeBrowser();
     const onChrome = isChromeBrowser();
 
-    // Windows + Edge: prefer Microsoft Ava, then Aria, Jenny, Michelle
     if (onWindows && onEdge) {
         const priorityNames = ["ava", "aria", "jenny", "michelle"];
         for (const name of priorityNames) {
@@ -299,24 +304,20 @@ function populateVoiceList() {
         }
     }
 
-    // Windows + Chrome: prefer "Google US English" if present
     if (!preferred && onWindows && onChrome) {
         preferred = voices.find(v =>
             v.name && v.name.toLowerCase().includes("google us english")
         ) || null;
     }
 
-    // If still not set, fallback to browser default voice
     if (!preferred) {
         preferred = voices.find(v => v.default) || null;
     }
 
-    // Then try en-US
     if (!preferred) {
         preferred = voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) || null;
     }
 
-    // Finally, fallback to first voice
     if (!preferred && voices.length > 0) {
         preferred = voices[0];
     }
@@ -334,13 +335,27 @@ function loadVoices() {
     populateVoiceList();
 }
 
-// Asynchronous voice loading in many browsers
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = loadVoices;
 }
 loadVoices();
 
-// Update selectedVoice when user changes dropdown
+/* Test the currently selected voice */
+function testSelectedVoice() {
+    const utterance = new SpeechSynthesisUtterance(
+        "This is a test. These are the letters you will hear: A, B, C."
+    );
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+    }
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+}
+
+// Update selectedVoice when user changes dropdown, and wire up buttons
 document.addEventListener("DOMContentLoaded", () => {
     const voiceSelect = document.getElementById("voiceSelect");
     if (voiceSelect) {
@@ -352,6 +367,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 localStorage.setItem(VOICE_STORAGE_KEY, String(index));
             }
         });
+    }
+
+    const chooseVoiceBtn = document.getElementById("chooseVoiceBtn");
+    const voiceBackBtn = document.getElementById("voiceBackBtn");
+    const testVoiceBtn = document.getElementById("testVoiceBtn");
+
+    if (chooseVoiceBtn && voiceBackBtn) {
+        chooseVoiceBtn.onclick = () => {
+            document.getElementById("menu").style.display = "none";
+            document.getElementById("optionsScreen").style.display = "none";
+            document.getElementById("voiceSettingsScreen").style.display = "block";
+        };
+        voiceBackBtn.onclick = () => {
+            document.getElementById("voiceSettingsScreen").style.display = "none";
+            document.getElementById("menu").style.display = "block";
+        };
+    }
+
+    if (testVoiceBtn) {
+        testVoiceBtn.onclick = testSelectedVoice;
     }
 });
 
@@ -381,7 +416,6 @@ function loadProgress() {
     }
     return data;
 }
-
 function saveProgress(level, accuracy) {
     let data = loadProgress();
     data.sessions += 1;
@@ -391,13 +425,11 @@ function saveProgress(level, accuracy) {
     if (accuracy > data.bestAccuracyEver) data.bestAccuracyEver = accuracy;
     localStorage.setItem("attentionProgress", JSON.stringify(data));
 }
-
 function displayProgress() {
     let data = loadProgress();
     let avg = data.accuracyHistory.length > 0
         ? Math.round(data.accuracyHistory.reduce((a,b)=>a+b,0) / data.accuracyHistory.length)
         : 0;
-
     document.getElementById("progressSummary").innerHTML = `
         <h2>Your Progress</h2>
         Sessions Completed: ${data.sessions}<br>
@@ -406,7 +438,6 @@ function displayProgress() {
         Average Total Accuracy: ${avg}%<br>
         Best Total Accuracy: ${data.bestAccuracyEver}%<br><br>
     `;
-
     document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
     document.getElementById("structuredModeLabel").textContent =
         `${data.preferredSessionLength}-Minute Structured Session Mode`;
@@ -421,19 +452,16 @@ document.getElementById("optionsBtn").onclick = () => {
     document.getElementById("optionsScreen").style.display = "block";
     document.getElementById("resetMessage").style.display = "none";
 };
-
 document.getElementById("homeBtn").onclick = () => {
     document.getElementById("optionsScreen").style.display = "none";
     document.getElementById("menu").style.display = "block";
 };
-
 document.getElementById("sessionLengthSelect").onchange = (e) => {
     let data = loadProgress();
     data.preferredSessionLength = parseInt(e.target.value);
     localStorage.setItem("attentionProgress", JSON.stringify(data));
     displayProgress();
 };
-
 document.getElementById("resetStatsBtn").onclick = () => {
     showModal("Are you sure you want to permanently delete all your training statistics?", function() {
         localStorage.removeItem("attentionProgress");
@@ -448,10 +476,8 @@ document.getElementById("resetStatsBtn").onclick = () => {
 function startVisualTimer(durationMinutes) {
     const display = document.getElementById("timerDisplay");
     display.style.display = "block";
-    display.classList.remove("final-minute"); // Reset color
-
+    display.classList.remove("final-minute");
     let timeLeft = durationMinutes * 60;
-
     function updateDisplay() {
         if (timeLeft <= 0) {
             clearInterval(timerInterval);
@@ -466,7 +492,6 @@ function startVisualTimer(durationMinutes) {
             display.classList.add("final-minute");
         }
     }
-
     updateDisplay();
     timerInterval = setInterval(updateDisplay, 1000);
 }
@@ -481,23 +506,18 @@ document.getElementById("startBtn").onclick = () => {
         `<strong>Instructions:</strong><br><br>Listen carefully and press the MATCH button when the current letter matches the one <strong>${n}</strong> back.<br><br>Avoid pressing for non-matches.`;
     document.getElementById("instructions").style.display = "block";
 };
-
 document.getElementById("beginTaskBtn").onclick = () => {
     document.getElementById("instructions").style.display = "none";
     document.getElementById("task").style.display = "block";
-
     timerMode = document.getElementById("timerMode").checked;
     sessionStartTime = Date.now();
     if (timerMode) startVisualTimer(loadProgress().preferredSessionLength);
-
     sessionHits = 0;
     sessionMisses = 0;
     sessionFalseAlarms = 0;
     totalSessionAccuracy = [];
-
     runBlock();
 };
-
 function runBlock() {
     if (trialTimeout) clearTimeout(trialTimeout);
     document.getElementById("levelLabel").textContent = "Level: " + n + "-back";
@@ -506,7 +526,6 @@ function runBlock() {
     results = [];
     nextTrial();
 }
-
 function nextTrial() {
     if (index >= sequence.length) {
         endBlock();
@@ -516,27 +535,23 @@ function nextTrial() {
     speak(sequence[index]);
     let isTarget = (index >= n && sequence[index] === sequence[index-n]);
     results.push({ target: isTarget, responded: false });
-
     trialTimeout = setTimeout(() => {
         trialActive = false;
         index++;
         nextTrial();
     }, isi);
 }
-
-// Speech function using selectedVoice
 function speak(letter) {
     window.speechSynthesis.cancel();
     setTimeout(() => {
         const u = new SpeechSynthesisUtterance(letter.toLowerCase());
         if (selectedVoice) u.voice = selectedVoice;
-        u.rate = 0.9;      // Slightly slower than default
-        u.pitch = 1.0;     // Neutral pitch
-        u.volume = 1.0;    // Full volume
+        u.rate = 0.9;
+        u.pitch = 1.0;
+        u.volume = 1.0;
         window.speechSynthesis.speak(u);
     }, 200);
 }
-
 function registerResponse() {
     if (!trialActive) return;
     results[index].responded = true;
@@ -544,7 +559,6 @@ function registerResponse() {
     btn.classList.add("pressed");
     setTimeout(() => btn.classList.remove("pressed"), 150);
 }
-
 document.getElementById("matchBtn").onclick = registerResponse;
 document.onkeydown = (e) => {
     if (e.code === "Space") {
@@ -552,7 +566,6 @@ document.onkeydown = (e) => {
         registerResponse();
     }
 };
-
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
@@ -568,13 +581,10 @@ function endBlock() {
     }
     sessionHits += bHits;
     sessionFalseAlarms += bFA;
-
     let bAcc = (tTarg + tNon) === 0
         ? 0
         : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
-
     totalSessionAccuracy.push(bAcc);
-
     if (bAcc >= 85 && n < 6) {
         showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
         return;
@@ -583,10 +593,8 @@ function endBlock() {
         showLevelReminder();
         return;
     }
-
     continueSession();
 }
-
 function continueSession() {
     let dur = loadProgress().preferredSessionLength * 60000;
     if (timerMode && (Date.now() - sessionStartTime < dur)) {
@@ -596,17 +604,13 @@ function continueSession() {
         endSession();
     }
 }
-
 function endSession() {
     document.getElementById("task").style.display = "none";
     document.getElementById("timerDisplay").style.display = "none";
-
     let div = document.getElementById("results");
     div.style.display = "block";
-
     let avg = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
     saveProgress(n, avg);
-
     div.innerHTML = `
     <h2>Session Complete</h2>
     <p>Session Total Accuracy: <span class="stat-box">${avg}%</span></p>
@@ -626,12 +630,10 @@ function buildSequence(len, nVal) {
     let t = new Set();
     let v = len - nVal;
     let d = Math.round(v * 0.3);
-
     while (t.size < d) {
         let p = Math.floor(Math.random() * v) + nVal;
         if (!t.has(p-1) || !t.has(p-2)) t.add(p);
     }
-
     for (let i = 0; i < len; i++) {
         if (i < nVal) {
             s.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ"[Math.floor(Math.random() * 26)]);
@@ -652,7 +654,6 @@ function showModal(mText, y, ncb) {
     document.getElementById("modalMessage").textContent = mText;
     const m = document.getElementById("customModal");
     m.style.display = "flex";
-
     document.getElementById("modalYesBtn").onclick = () => {
         m.style.display = "none";
         if (y) y();
@@ -662,7 +663,6 @@ function showModal(mText, y, ncb) {
         if (ncb) ncb();
     };
 }
-
 function showLevelReminder() {
     document.getElementById("instructionsBox").innerHTML =
         `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
