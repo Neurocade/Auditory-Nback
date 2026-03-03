@@ -39,13 +39,6 @@ button {
 }
 #startBtn { background: #4caf50; color: black; font-weight: bold; }
 
-/* Choose Voice button styled same as start */
-#chooseVoiceBtn {
-    background: #4caf50;
-    color: black;
-    font-weight: bold;
-}
-
 .secondary-btn {
     font-size: 18px;
     padding: 10px 20px;
@@ -131,34 +124,36 @@ select {
 
     <!-- ===================== HOME / MENU ===================== -->
     <div id="menu">
-        <div id="progressSummary"></div>
-        <div class="settings-group">
-            <label>
-                <input type="checkbox" id="timerMode">
-                <span id="structuredModeLabel">Structured Session Mode</span>
-            </label>
-            <br><br>
-            <label for="levelSelect">Select Starting Level: </label>
-            <select id="levelSelect">
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-            </select>
-        </div>
-
-        <p style="font-size:18px;color:#ccc;margin-top:8px;">
-            Difficulty hearing the letters? Try choosing a new voice.
-        </p>
-        <button id="chooseVoiceBtn">Choose Voice</button>
-
+    <div id="progressSummary"></div>
+    <div class="settings-group">
+        <label>
+            <input type="checkbox" id="timerMode">
+            <span id="structuredModeLabel">Structured Session Mode</span>
+        </label>
         <br><br>
-        <button id="startBtn">Start Training</button>
-        <br><br>
-        <button id="optionsBtn" class="secondary-btn">Options</button>
+        <label for="levelSelect">Select Starting Level: </label>
+        <select id="levelSelect">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+        </select>
     </div>
+
+    <!-- Start Training button stays near the top -->
+    <button id="startBtn">Start Training</button>
+
+    <!-- MOVED: helper text + Choose Voice BELOW Start Training -->
+    <p style="font-size:18px;color:#ccc;margin-top:8px;">
+        Difficulty hearing the letters? Try choosing a new voice.
+    </p>
+    <button id="chooseVoiceBtn" class="secondary-btn">Choose Voice</button>
+
+    <br><br>
+    <button id="optionsBtn" class="secondary-btn">Options</button>
+</div>
 
     <!-- ===================== OPTIONS SCREEN ===================== -->
     <div id="optionsScreen" style="display:none;">
