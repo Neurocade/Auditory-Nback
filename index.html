@@ -266,14 +266,19 @@ select {
     </div>
     <div id="results"></div>
 </div>
+
+<!-- Shared modal: used for both Yes/No prompts and OK-only info dialogs -->
 <div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:1000;">
     <div style="background:#222; padding:30px; border-radius:12px; width:500px; text-align:center;">
         <p id="modalMessage" style="font-size:22px;"></p>
         <br>
-        <button id="modalYesBtn" style="background:#4caf50; color:black;">Yes</button>
-        <button id="modalNoBtn" style="background:#f44336; color:white;">No</button>
+        <div id="modalButtonsContainer">
+            <button id="modalYesBtn" style="background:#4caf50; color:black;">Yes</button>
+            <button id="modalNoBtn" style="background:#f44336; color:white;">No</button>
+        </div>
     </div>
 </div>
+
 <script>
 /* ========================================================
    GLOBAL VARIABLES
@@ -438,8 +443,16 @@ function loadProgress() {
             preferredSessionLength: 10
         };
     }
+
+    // Normalize preferredSessionLength to a safe default (10) if invalid
+    const validSessionLengths = [5, 10, 15];
+    if (!validSessionLengths.includes(data.preferredSessionLength)) {
+        data.preferredSessionLength = 10;
+    }
+
     return data;
 }
+
 function saveProgress(level, accuracy) {
     let data = loadProgress();
     data.sessions += 1;
@@ -462,7 +475,12 @@ function displayProgress() {
         Average Total Accuracy: ${avg}%<br>
         Best Total Accuracy: ${data.bestAccuracyEver}%<br><br>
     `;
-    document.getElementById("sessionLengthSelect").value = data.preferredSessionLength;
+
+    const sessionLengthSelect = document.getElementById("sessionLengthSelect");
+    if (sessionLengthSelect) {
+        sessionLengthSelect.value = data.preferredSessionLength;
+    }
+
     document.getElementById("structuredModeLabel").textContent =
         `${data.preferredSessionLength}-Minute Structured Session Mode`;
 }
@@ -481,7 +499,7 @@ document.getElementById("homeBtn").onclick = () => {
 };
 document.getElementById("sessionLengthSelect").onchange = (e) => {
     let data = loadProgress();
-    data.preferredSessionLength = parseInt(e.target.value);
+    data.preferredSessionLength = parseInt(e.target.value, 10) || 10;
     localStorage.setItem("attentionProgress", JSON.stringify(data));
     displayProgress();
 };
@@ -588,32 +606,31 @@ document.onkeydown = (e) => {
     }
 };
 
-/* ===== NEW: show per-block stats before level decisions ===== */
-function showBlockResults(bAcc, bHits, bFA, tTarg, tNon, callback) {
-    const totalTrials = tTarg + tNon;
-    const misses = tTarg - bHits;
-    const modalText = `
+/* ===== Block results: OK-only stats dialog ===== */
+function showBlockResults(bAcc, levelHitsBefore, levelMissesBefore, levelFalseAlarmsBefore, callback) {
+    // Compute this block's hits/misses/false alarms from session totals
+    const blockHits = sessionHits - levelHitsBefore;
+    const blockMisses = sessionMisses - levelMissesBefore;
+    const blockFAs = sessionFalseAlarms - levelFalseAlarmsBefore;
+
+    const text = `
 Block Complete (Level ${n}-back)
 
-Accuracy this block: ${bAcc}%
+Total Accuracy: ${bAcc}%
 
-Details:
-- Targets: ${tTarg}
-- Hits: ${bHits}
-- Misses: ${misses < 0 ? 0 : misses}
-- Non-targets: ${tNon}
-- False Alarms: ${bFA}
+Hits: ${blockHits < 0 ? 0 : blockHits}
+Misses: ${blockMisses < 0 ? 0 : blockMisses}
+False Alarms: ${blockFAs < 0 ? 0 : blockFAs}
 `.trim();
 
-    showModal(modalText, () => {
-        if (callback) callback();
-    }, () => {
-        // We use only the "Yes" button for continuing; No mirrors Yes here
-        if (callback) callback();
-    });
+    showInfoModal(text, callback);
 }
 
 function endBlock() {
+    const hitsBefore = sessionHits;
+    const missesBefore = sessionMisses;
+    const faBefore = sessionFalseAlarms;
+
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
         let r = results[i];
@@ -633,8 +650,8 @@ function endBlock() {
         : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
     totalSessionAccuracy.push(bAcc);
 
-    // Always show block results, then decide on level and continuation
-    showBlockResults(bAcc, bHits, bFA, tTarg, tNon, () => {
+    // Show per-block stats (OK-only modal), then handle level changes
+    showBlockResults(bAcc, hitsBefore, missesBefore, faBefore, () => {
         if (bAcc >= 85 && n < 6) {
             showModal("Excellent focus! Increase the level?", () => {
                 n++;
@@ -705,18 +722,52 @@ function buildSequence(len, nVal) {
    MODAL HELPERS
 ======================================================== */
 function showModal(mText, y, ncb) {
-    document.getElementById("modalMessage").textContent = mText;
+    // Two-button Yes/No modal (used for reset + increase-level prompts)
+    const msgEl = document.getElementById("modalMessage");
+    const container = document.getElementById("modalButtonsContainer");
+    const yesBtn = document.getElementById("modalYesBtn");
+    const noBtn = document.getElementById("modalNoBtn");
     const m = document.getElementById("customModal");
+
+    msgEl.textContent = mText;
+    container.innerHTML = "";
+    container.appendChild(yesBtn);
+    container.appendChild(noBtn);
+
+    yesBtn.textContent = "Yes";
+    noBtn.textContent = "No";
+
     m.style.display = "flex";
-    document.getElementById("modalYesBtn").onclick = () => {
+    yesBtn.onclick = () => {
         m.style.display = "none";
         if (y) y();
     };
-    document.getElementById("modalNoBtn").onclick = () => {
+    noBtn.onclick = () => {
         m.style.display = "none";
         if (ncb) ncb();
     };
 }
+
+function showInfoModal(mText, cb) {
+    // Single-button OK modal (used for block-complete stats)
+    const msgEl = document.getElementById("modalMessage");
+    const container = document.getElementById("modalButtonsContainer");
+    const yesBtn = document.getElementById("modalYesBtn");
+    const m = document.getElementById("customModal");
+
+    msgEl.textContent = mText;
+    container.innerHTML = "";
+    container.appendChild(yesBtn);
+
+    yesBtn.textContent = "OK";
+
+    m.style.display = "flex";
+    yesBtn.onclick = () => {
+        m.style.display = "none";
+        if (cb) cb();
+    };
+}
+
 function showLevelReminder() {
     document.getElementById("instructionsBox").innerHTML =
         `<strong>Level Reminder:</strong><br><br>Level ${n} — match ${n} back.`;
