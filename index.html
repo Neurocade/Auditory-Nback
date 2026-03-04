@@ -205,7 +205,7 @@ select {
     </div>
     <!-- Start Training button stays near the top -->
     <button id="startBtn">Start Training</button>
-    <!-- MOVED: helper text + Choose Voice BELOW Start Training -->
+    <!-- helper text + Choose Voice BELOW Start Training -->
     <p style="font-size:18px;color:#ccc;margin-top:8px;">
         Difficulty hearing the letters? Try choosing a new voice.
     </p>
@@ -237,10 +237,8 @@ select {
             <select id="voiceSelect">
                 <!-- Populated dynamically with available SpeechSynthesis voices -->
             </select>
-            <!-- NEW: Test Voice button -->
             <br>
             <button id="testVoiceBtn" class="secondary-btn">Test Voice</button>
-            <!-- Instructions text (unchanged, reformatted for readability) -->
             <p style="font-size:16px;color:#ccc;margin-top:8px; line-height:1.8;">
                 If using Windows and voice is unclear, try selecting one of the following:<br><br>
                 If browser is Microsoft Edge:<br>
@@ -589,6 +587,32 @@ document.onkeydown = (e) => {
         registerResponse();
     }
 };
+
+/* ===== NEW: show per-block stats before level decisions ===== */
+function showBlockResults(bAcc, bHits, bFA, tTarg, tNon, callback) {
+    const totalTrials = tTarg + tNon;
+    const misses = tTarg - bHits;
+    const modalText = `
+Block Complete (Level ${n}-back)
+
+Accuracy this block: ${bAcc}%
+
+Details:
+- Targets: ${tTarg}
+- Hits: ${bHits}
+- Misses: ${misses < 0 ? 0 : misses}
+- Non-targets: ${tNon}
+- False Alarms: ${bFA}
+`.trim();
+
+    showModal(modalText, () => {
+        if (callback) callback();
+    }, () => {
+        // We use only the "Yes" button for continuing; No mirrors Yes here
+        if (callback) callback();
+    });
+}
+
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     for (let i = n; i < results.length; i++) {
@@ -608,16 +632,25 @@ function endBlock() {
         ? 0
         : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
     totalSessionAccuracy.push(bAcc);
-    if (bAcc >= 85 && n < 6) {
-        showModal("Excellent focus! Increase the level?", () => { n++; showLevelReminder(); }, () => { continueSession(); });
-        return;
-    } else if (bAcc < 60 && n > 1) {
-        n--;
-        showLevelReminder();
-        return;
-    }
-    continueSession();
+
+    // Always show block results, then decide on level and continuation
+    showBlockResults(bAcc, bHits, bFA, tTarg, tNon, () => {
+        if (bAcc >= 85 && n < 6) {
+            showModal("Excellent focus! Increase the level?", () => {
+                n++;
+                showLevelReminder();
+            }, () => {
+                continueSession();
+            });
+        } else if (bAcc < 60 && n > 1) {
+            n--;
+            showLevelReminder();
+        } else {
+            continueSession();
+        }
+    });
 }
+
 function continueSession() {
     let dur = loadProgress().preferredSessionLength * 60000;
     if (timerMode && (Date.now() - sessionStartTime < dur)) {
