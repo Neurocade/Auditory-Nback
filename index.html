@@ -590,7 +590,33 @@ False Alarms: ${blockFAs}
 `.trim();
     showOkModal(text, callback);
 }
-
+function handlePostBlockDecisions(bAcc) {
+    if (bAcc >= 85 && n < 6) {
+        showYesNoModal("Excellent focus! Increase the level?", () => {
+            n++;
+            showLevelReminder();
+        }, () => {
+            showContinueTrainingModal("Continue training?", () => {
+                continueSession();
+            }, () => {
+                goToHomeFromSession();
+            });
+        });
+    } else if (bAcc < 60 && n > 1) {
+        n--;
+        showContinueTrainingModal("Performance was low this round. Continue training?", () => {
+            showLevelReminder();
+        }, () => {
+            goToHomeFromSession();
+        });
+    } else {
+        showContinueTrainingModal("Continue training?", () => {
+            continueSession();
+        }, () => {
+            goToHomeFromSession();
+        });
+    }
+}
 function endBlock() {
     // Compute block stats
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
@@ -622,40 +648,12 @@ function endBlock() {
 
     totalSessionAccuracy.push(bAcc);
 
-    // Show per-block stats, then branch
-    showBlockResults(bAcc, bHits, blockMisses, bFA, () => {
-        if (bAcc >= 85 && n < 6) {
-            // Good performance: offer level increase
-            showYesNoModal("Excellent focus! Increase the level?", () => {
-                n++;
-                showLevelReminder();
-            }, () => {
-                // Don't increase level; ask to continue training
-                showContinueTrainingModal("Continue training?", () => {
-                    continueSession();
-                }, () => {
-                    goToHomeFromSession();
-                });
-            });
-        } else if (bAcc < 60 && n > 1) {
-            // Low performance: lower level and ask about continuing
-            n--;
-            showContinueTrainingModal("Performance was low this round. Continue training?", () => {
-                showLevelReminder();
-            }, () => {
-                goToHomeFromSession();
-            });
-        } else {
-            // Middle performance or boundary levels: ask to continue
-            showContinueTrainingModal("Continue training?", () => {
-                continueSession();
-            }, () => {
-                goToHomeFromSession();
-            });
-        }
-    });
+ // Show per-block stats, then branch
+showBlockResults(bAcc, bHits, blockMisses, bFA, () => {
+    handlePostBlockDecisions(bAcc);
+});
 }
-
+    
 function continueSession() {
     let dur = loadProgress().preferredSessionLength * 60000;
     if (timerMode && (Date.now() - sessionStartTime < dur)) {
