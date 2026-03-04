@@ -444,7 +444,6 @@ function loadProgress() {
         };
     }
 
-    // Normalize preferredSessionLength to a safe default (10) if invalid
     const validSessionLengths = [5, 10, 15];
     if (!validSessionLengths.includes(data.preferredSessionLength)) {
         data.preferredSessionLength = 10;
@@ -650,20 +649,36 @@ function endBlock() {
         : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
     totalSessionAccuracy.push(bAcc);
 
-    // Show per-block stats (OK-only modal), then handle level changes
+    // Show per-block stats (OK-only modal), then handle follow-up questions
     showBlockResults(bAcc, hitsBefore, missesBefore, faBefore, () => {
         if (bAcc >= 85 && n < 6) {
+            // Good performance: offer level increase
             showModal("Excellent focus! Increase the level?", () => {
                 n++;
                 showLevelReminder();
             }, () => {
-                continueSession();
+                // If they do NOT want to increase, ask if they want to continue training
+                showContinueTrainingModal("Continue training?", () => {
+                    continueSession();
+                }, () => {
+                    goToHomeFromSession();
+                });
             });
         } else if (bAcc < 60 && n > 1) {
+            // Low performance: lower level and ask about continuing
             n--;
-            showLevelReminder();
+            showContinueTrainingModal("Performance was low this round. Continue training?", () => {
+                showLevelReminder();
+            }, () => {
+                goToHomeFromSession();
+            });
         } else {
-            continueSession();
+            // Middle performance or at boundary levels: ask to continue
+            showContinueTrainingModal("Continue training?", () => {
+                continueSession();
+            }, () => {
+                goToHomeFromSession();
+            });
         }
     });
 }
@@ -677,6 +692,20 @@ function continueSession() {
         endSession();
     }
 }
+
+/* Go back to home from a running/finished session */
+function goToHomeFromSession() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    document.getElementById("task").style.display = "none";
+    document.getElementById("timerDisplay").style.display = "none";
+    document.getElementById("instructions").style.display = "none";
+    document.getElementById("results").style.display = "none";
+    document.getElementById("optionsScreen").style.display = "none";
+    document.getElementById("voiceSettingsScreen").style.display = "none";
+    document.getElementById("menu").style.display = "block";
+}
+
 function endSession() {
     document.getElementById("task").style.display = "none";
     document.getElementById("timerDisplay").style.display = "none";
@@ -722,7 +751,7 @@ function buildSequence(len, nVal) {
    MODAL HELPERS
 ======================================================== */
 function showModal(mText, y, ncb) {
-    // Two-button Yes/No modal (used for reset + increase-level prompts)
+    // Two-button Yes/No modal
     const msgEl = document.getElementById("modalMessage");
     const container = document.getElementById("modalButtonsContainer");
     const yesBtn = document.getElementById("modalYesBtn");
@@ -749,7 +778,7 @@ function showModal(mText, y, ncb) {
 }
 
 function showInfoModal(mText, cb) {
-    // Single-button OK modal (used for block-complete stats)
+    // Single-button OK modal (block-complete stats)
     const msgEl = document.getElementById("modalMessage");
     const container = document.getElementById("modalButtonsContainer");
     const yesBtn = document.getElementById("modalYesBtn");
@@ -765,6 +794,33 @@ function showInfoModal(mText, cb) {
     yesBtn.onclick = () => {
         m.style.display = "none";
         if (cb) cb();
+    };
+}
+
+/* Yes / Back to Home modal for "Continue training?" flows */
+function showContinueTrainingModal(message, onYes, onBackHome) {
+    const msgEl = document.getElementById("modalMessage");
+    const container = document.getElementById("modalButtonsContainer");
+    const yesBtn = document.getElementById("modalYesBtn");
+    const noBtn = document.getElementById("modalNoBtn");
+    const m = document.getElementById("customModal");
+
+    msgEl.textContent = message;
+    container.innerHTML = "";
+    container.appendChild(yesBtn);
+    container.appendChild(noBtn);
+
+    yesBtn.textContent = "Yes";
+    noBtn.textContent = "Back to Home";
+
+    m.style.display = "flex";
+    yesBtn.onclick = () => {
+        m.style.display = "none";
+        if (onYes) onYes();
+    };
+    noBtn.onclick = () => {
+        m.style.display = "none";
+        if (onBackHome) onBackHome();
     };
 }
 
