@@ -130,7 +130,7 @@ select {
 
     #app {
         padding: 16px;
-        border-radius: 0;        /* optional: simpler edges on phones */
+        border-radius: 0;
         min-height: auto;
     }
 
@@ -143,7 +143,7 @@ select {
     }
 
     button {
-        width: 100%;             /* full width for easier tapping */
+        width: 100%;
         max-width: 100%;
         font-size: 20px;
         padding: 12px 16px;
@@ -186,33 +186,31 @@ select {
     <h1>Attention Training</h1>
     <!-- ===================== HOME / MENU ===================== -->
     <div id="menu">
-    <div id="progressSummary"></div>
-    <div class="settings-group">
-        <label>
-            <input type="checkbox" id="timerMode">
-            <span id="structuredModeLabel">Structured Session Mode</span>
-        </label>
+        <div id="progressSummary"></div>
+        <div class="settings-group">
+            <label>
+                <input type="checkbox" id="timerMode">
+                <span id="structuredModeLabel">Structured Session Mode</span>
+            </label>
+            <br><br>
+            <label for="levelSelect">Select Starting Level: </label>
+            <select id="levelSelect">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+            </select>
+        </div>
+        <button id="startBtn">Start Training</button>
+        <p style="font-size:18px;color:#ccc;margin-top:8px;">
+            Difficulty hearing the letters? Try choosing a new voice.
+        </p>
+        <button id="chooseVoiceBtn" class="secondary-btn">Choose Voice</button>
         <br><br>
-        <label for="levelSelect">Select Starting Level: </label>
-        <select id="levelSelect">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-        </select>
+        <button id="optionsBtn" class="secondary-btn">Options</button>
     </div>
-    <!-- Start Training button stays near the top -->
-    <button id="startBtn">Start Training</button>
-    <!-- helper text + Choose Voice BELOW Start Training -->
-    <p style="font-size:18px;color:#ccc;margin-top:8px;">
-        Difficulty hearing the letters? Try choosing a new voice.
-    </p>
-    <button id="chooseVoiceBtn" class="secondary-btn">Choose Voice</button>
-    <br><br>
-    <button id="optionsBtn" class="secondary-btn">Options</button>
-</div>
     <!-- ===================== OPTIONS SCREEN ===================== -->
     <div id="optionsScreen" style="display:none;">
         <h2>Options</h2>
@@ -234,9 +232,7 @@ select {
         <h2>Voice Settings</h2>
         <div class="settings-group">
             <label for="voiceSelect">Voice (for letters): </label>
-            <select id="voiceSelect">
-                <!-- Populated dynamically with available SpeechSynthesis voices -->
-            </select>
+            <select id="voiceSelect"></select>
             <br>
             <button id="testVoiceBtn" class="secondary-btn">Test Voice</button>
             <p style="font-size:16px;color:#ccc;margin-top:8px; line-height:1.8;">
@@ -267,10 +263,10 @@ select {
     <div id="results"></div>
 </div>
 
-<!-- Shared modal: used for both Yes/No prompts and OK-only info dialogs -->
+<!-- Shared modal -->
 <div id="customModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); justify-content:center; align-items:center; z-index:1000;">
     <div style="background:#222; padding:30px; border-radius:12px; width:500px; text-align:center;">
-        <p id="modalMessage" style="font-size:22px;"></p>
+        <p id="modalMessage" style="font-size:22px; white-space:pre-line;"></p>
         <br>
         <div id="modalButtonsContainer">
             <button id="modalYesBtn" style="background:#4caf50; color:black;">Yes</button>
@@ -325,14 +321,12 @@ function populateVoiceList() {
         option.textContent = `${voice.name} (${voice.lang})${voice.default ? " [default]" : ""}`;
         voiceSelect.appendChild(option);
     });
-    // 1. Try to restore previously selected voice from localStorage
     const savedIndex = parseInt(localStorage.getItem(VOICE_STORAGE_KEY), 10);
     if (!isNaN(savedIndex) && voices[savedIndex]) {
         voiceSelect.value = savedIndex;
         selectedVoice = voices[savedIndex];
         return;
     }
-    // 2. No saved voice: choose a good default.
     let preferred = null;
     const onWindows = isWindowsPlatform();
     const onEdge = isEdgeBrowser();
@@ -351,15 +345,9 @@ function populateVoiceList() {
             v.name && v.name.toLowerCase().includes("google us english")
         ) || null;
     }
-    if (!preferred) {
-        preferred = voices.find(v => v.default) || null;
-    }
-    if (!preferred) {
-        preferred = voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) || null;
-    }
-    if (!preferred && voices.length > 0) {
-        preferred = voices[0];
-    }
+    if (!preferred) preferred = voices.find(v => v.default) || null;
+    if (!preferred) preferred = voices.find(v => v.lang && v.lang.toLowerCase().includes("en-us")) || null;
+    if (!preferred && voices.length > 0) preferred = voices[0];
     if (preferred) {
         selectedVoice = preferred;
         const index = voices.indexOf(preferred);
@@ -368,28 +356,22 @@ function populateVoiceList() {
         }
     }
 }
-function loadVoices() {
-    populateVoiceList();
-}
+function loadVoices() { populateVoiceList(); }
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = loadVoices;
 }
 loadVoices();
-/* Test the currently selected voice */
 function testSelectedVoice() {
     const utterance = new SpeechSynthesisUtterance(
         "This is a test. These are the letters you will hear: A, B, C."
     );
-    if (selectedVoice) {
-        utterance.voice = selectedVoice;
-    }
+    if (selectedVoice) utterance.voice = selectedVoice;
     utterance.rate = 0.9;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
 }
-// Update selectedVoice when user changes dropdown, and wire up buttons
 document.addEventListener("DOMContentLoaded", () => {
     const voiceSelect = document.getElementById("voiceSelect");
     if (voiceSelect) {
@@ -416,11 +398,8 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("menu").style.display = "block";
         };
     }
-    if (testVoiceBtn) {
-        testVoiceBtn.onclick = testSelectedVoice;
-    }
+    if (testVoiceBtn) testVoiceBtn.onclick = testSelectedVoice;
 });
-/* PREVENT AUDIO CUTOFF (can be removed if causing issues) */
 setInterval(() => {
     if (window.speechSynthesis && !window.speechSynthesis.speaking) {
         const p = new SpeechSynthesisUtterance("");
@@ -443,15 +422,12 @@ function loadProgress() {
             preferredSessionLength: 10
         };
     }
-
     const validSessionLengths = [5, 10, 15];
     if (!validSessionLengths.includes(data.preferredSessionLength)) {
         data.preferredSessionLength = 10;
     }
-
     return data;
 }
-
 function saveProgress(level, accuracy) {
     let data = loadProgress();
     data.sessions += 1;
@@ -474,12 +450,8 @@ function displayProgress() {
         Average Total Accuracy: ${avg}%<br>
         Best Total Accuracy: ${data.bestAccuracyEver}%<br><br>
     `;
-
     const sessionLengthSelect = document.getElementById("sessionLengthSelect");
-    if (sessionLengthSelect) {
-        sessionLengthSelect.value = data.preferredSessionLength;
-    }
-
+    if (sessionLengthSelect) sessionLengthSelect.value = data.preferredSessionLength;
     document.getElementById("structuredModeLabel").textContent =
         `${data.preferredSessionLength}-Minute Structured Session Mode`;
 }
@@ -503,7 +475,7 @@ document.getElementById("sessionLengthSelect").onchange = (e) => {
     displayProgress();
 };
 document.getElementById("resetStatsBtn").onclick = () => {
-    showModal("Are you sure you want to permanently delete all your training statistics?", function() {
+    showYesNoModal("Are you sure you want to permanently delete all your training statistics?", function() {
         localStorage.removeItem("attentionProgress");
         displayProgress();
         document.getElementById("resetMessage").style.display = "block";
@@ -527,9 +499,7 @@ function startVisualTimer(durationMinutes) {
         let mins = Math.floor(timeLeft / 60);
         let secs = timeLeft % 60;
         display.textContent = `Time Remaining: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        if (timeLeft < 60) {
-            display.classList.add("final-minute");
-        }
+        if (timeLeft < 60) display.classList.add("final-minute");
     }
     updateDisplay();
     timerInterval = setInterval(updateDisplay, 1000);
@@ -605,59 +575,62 @@ document.onkeydown = (e) => {
     }
 };
 
-/* ===== Block results: OK-only stats dialog ===== */
-function showBlockResults(bAcc, levelHitsBefore, levelMissesBefore, levelFalseAlarmsBefore, callback) {
-    // Compute this block's hits/misses/false alarms from session totals
-    const blockHits = sessionHits - levelHitsBefore;
-    const blockMisses = sessionMisses - levelMissesBefore;
-    const blockFAs = sessionFalseAlarms - levelFalseAlarmsBefore;
+/* ===== Block results and branching ===== */
 
+// Show OK-only stats modal
+function showBlockResults(bAcc, blockHits, blockMisses, blockFAs, callback) {
     const text = `
 Block Complete (Level ${n}-back)
 
 Total Accuracy: ${bAcc}%
 
-Hits: ${blockHits < 0 ? 0 : blockHits}
-Misses: ${blockMisses < 0 ? 0 : blockMisses}
-False Alarms: ${blockFAs < 0 ? 0 : blockFAs}
+Hits: ${blockHits}
+Misses: ${blockMisses}
+False Alarms: ${blockFAs}
 `.trim();
-
-    showInfoModal(text, callback);
+    showOkModal(text, callback);
 }
 
 function endBlock() {
-    const hitsBefore = sessionHits;
-    const missesBefore = sessionMisses;
-    const faBefore = sessionFalseAlarms;
-
+    // Compute block stats
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
+    let blockMisses = 0;
     for (let i = n; i < results.length; i++) {
         let r = results[i];
         if (r.target) {
             tTarg++;
-            if (r.responded) bHits++;
-            else sessionMisses++;
+            if (r.responded) {
+                bHits++;
+            } else {
+                blockMisses++;
+                sessionMisses++;
+            }
         } else {
             tNon++;
-            if (r.responded) bFA++;
+            if (r.responded) {
+                bFA++;
+            }
         }
     }
     sessionHits += bHits;
     sessionFalseAlarms += bFA;
-    let bAcc = (tTarg + tNon) === 0
+
+    let totalRelevant = tTarg + tNon;
+    let bAcc = totalRelevant === 0
         ? 0
-        : Math.round(((bHits + (tNon - bFA)) / (tTarg + tNon)) * 100);
+        : Math.round(((bHits + (tNon - bFA)) / totalRelevant) * 100);
+
     totalSessionAccuracy.push(bAcc);
 
-    // Show per-block stats (OK-only modal), then handle follow-up questions
-    showBlockResults(bAcc, hitsBefore, missesBefore, faBefore, () => {
+    // Show per-block stats, then branch
+    showBlockResults(bAcc, bHits, blockMisses, bFA, () => {
         if (bAcc >= 85 && n < 6) {
             // Good performance: offer level increase
-            showModal("Excellent focus! Increase the level?", () => {
+            showYesNoModal("Excellent focus! Increase the level?", () => {
                 n++;
                 showLevelReminder();
             }, () => {
-                // If they do NOT want to increase, ask if they want to continue training
+                // Don't increase level; ask to continue training
                 showContinueTrainingModal("Continue training?", () => {
                     continueSession();
                 }, () => {
@@ -673,7 +646,7 @@ function endBlock() {
                 goToHomeFromSession();
             });
         } else {
-            // Middle performance or at boundary levels: ask to continue
+            // Middle performance or boundary levels: ask to continue
             showContinueTrainingModal("Continue training?", () => {
                 continueSession();
             }, () => {
@@ -693,7 +666,6 @@ function continueSession() {
     }
 }
 
-/* Go back to home from a running/finished session */
 function goToHomeFromSession() {
     clearInterval(timerInterval);
     timerInterval = null;
@@ -750,76 +722,63 @@ function buildSequence(len, nVal) {
 /* ========================================================
    MODAL HELPERS
 ======================================================== */
-function showModal(mText, y, ncb) {
-    // Two-button Yes/No modal
+function baseModalSetup(message) {
     const msgEl = document.getElementById("modalMessage");
-    const container = document.getElementById("modalButtonsContainer");
-    const yesBtn = document.getElementById("modalYesBtn");
-    const noBtn = document.getElementById("modalNoBtn");
     const m = document.getElementById("customModal");
+    msgEl.textContent = message;
+    m.style.display = "flex";
+    return {
+        container: document.getElementById("modalButtonsContainer"),
+        yesBtn: document.getElementById("modalYesBtn"),
+        noBtn: document.getElementById("modalNoBtn"),
+        modal: m
+    };
+}
 
-    msgEl.textContent = mText;
+// Yes / No modal (reset, increase level)
+function showYesNoModal(message, onYes, onNo) {
+    const { container, yesBtn, noBtn, modal } = baseModalSetup(message);
     container.innerHTML = "";
     container.appendChild(yesBtn);
     container.appendChild(noBtn);
-
     yesBtn.textContent = "Yes";
     noBtn.textContent = "No";
-
-    m.style.display = "flex";
     yesBtn.onclick = () => {
-        m.style.display = "none";
-        if (y) y();
-    };
-    noBtn.onclick = () => {
-        m.style.display = "none";
-        if (ncb) ncb();
-    };
-}
-
-function showInfoModal(mText, cb) {
-    // Single-button OK modal (block-complete stats)
-    const msgEl = document.getElementById("modalMessage");
-    const container = document.getElementById("modalButtonsContainer");
-    const yesBtn = document.getElementById("modalYesBtn");
-    const m = document.getElementById("customModal");
-
-    msgEl.textContent = mText;
-    container.innerHTML = "";
-    container.appendChild(yesBtn);
-
-    yesBtn.textContent = "OK";
-
-    m.style.display = "flex";
-    yesBtn.onclick = () => {
-        m.style.display = "none";
-        if (cb) cb();
-    };
-}
-
-/* Yes / Back to Home modal for "Continue training?" flows */
-function showContinueTrainingModal(message, onYes, onBackHome) {
-    const msgEl = document.getElementById("modalMessage");
-    const container = document.getElementById("modalButtonsContainer");
-    const yesBtn = document.getElementById("modalYesBtn");
-    const noBtn = document.getElementById("modalNoBtn");
-    const m = document.getElementById("customModal");
-
-    msgEl.textContent = message;
-    container.innerHTML = "";
-    container.appendChild(yesBtn);
-    container.appendChild(noBtn);
-
-    yesBtn.textContent = "Yes";
-    noBtn.textContent = "Back to Home";
-
-    m.style.display = "flex";
-    yesBtn.onclick = () => {
-        m.style.display = "none";
+        modal.style.display = "none";
         if (onYes) onYes();
     };
     noBtn.onclick = () => {
-        m.style.display = "none";
+        modal.style.display = "none";
+        if (onNo) onNo();
+    };
+}
+
+// OK-only modal (block stats)
+function showOkModal(message, onOk) {
+    const { container, yesBtn, modal } = baseModalSetup(message);
+    container.innerHTML = "";
+    container.appendChild(yesBtn);
+    yesBtn.textContent = "OK";
+    yesBtn.onclick = () => {
+        modal.style.display = "none";
+        if (onOk) onOk();
+    };
+}
+
+// "Continue training?" modal: Yes / Back to Home
+function showContinueTrainingModal(message, onYes, onBackHome) {
+    const { container, yesBtn, noBtn, modal } = baseModalSetup(message);
+    container.innerHTML = "";
+    container.appendChild(yesBtn);
+    container.appendChild(noBtn);
+    yesBtn.textContent = "Yes";
+    noBtn.textContent = "Back to Home";
+    yesBtn.onclick = () => {
+        modal.style.display = "none";
+        if (onYes) onYes();
+    };
+    noBtn.onclick = () => {
+        modal.style.display = "none";
         if (onBackHome) onBackHome();
     };
 }
