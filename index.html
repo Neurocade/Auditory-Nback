@@ -596,27 +596,42 @@ function handlePostBlockDecisions(bAcc) {
             n++;
             showLevelReminder();
         }, () => {
-            showContinueTrainingModal("Continue training?", () => {
-                continueSession();
-            }, () => {
-                goToHomeFromSession();
-            });
+            // User said "No" to leveling up, proceed to next step
+            continueSession();
         });
     } else if (bAcc < 60 && n > 1) {
         n--;
-        showContinueTrainingModal("Performance was low this round. Continue training?", () => {
+        showOkModal(`Performance was a bit low. Dropping to Level ${n}.`, () => {
             showLevelReminder();
-        }, () => {
-            goToHomeFromSession();
         });
     } else {
-        showContinueTrainingModal("Continue training?", () => {
-            continueSession();
+        // Just standard continuation
+        continueSession();
+    }
+}
+
+function continueSession() {
+    if (timerMode) {
+        // STRUCTURED MODE: Check the clock
+        let dur = loadProgress().preferredSessionLength * 60000;
+        let timeElapsed = Date.now() - sessionStartTime;
+
+        if (timeElapsed < dur) {
+            runBlock(); // Automatically start next block
+        } else {
+            clearInterval(timerInterval);
+            endSession(); // Time is up!
+        }
+    } else {
+        // FREE PLAY MODE: Ask the user if they want to keep going
+        showYesNoModal("Would you like to start another block?", () => {
+            runBlock();
         }, () => {
-            goToHomeFromSession();
+            goToHomeFromSession(); // Or endSession() if you want to save stats
         });
     }
 }
+
 function endBlock() {
     // Compute block stats
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
