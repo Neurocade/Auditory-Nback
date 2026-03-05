@@ -869,6 +869,30 @@ function continueSession() {
     }
 }
 
+/* ========================================================
+   ACCURACY CALCULATION
+======================================================== */
+function calculateAccuracy(hits, misses, falseAlarms) {
+    let totalTargets = hits + misses;
+    
+    // If no targets were presented, return 0
+    if (totalTargets === 0) return 0;
+    
+    // Calculate hit rate (0-100)
+    let hitRate = (hits / totalTargets) * 100;
+    
+    // If they got zero hits, accuracy is 0 regardless of false alarms
+    if (hits === 0) return 0;
+    
+    // Penalty: Each false alarm reduces accuracy by 5%
+    let penalty = falseAlarms * 5;
+    
+    // Final accuracy with floor at 0%
+    let accuracy = Math.max(0, hitRate - penalty);
+    
+    return Math.round(accuracy);
+}
+   
 function endBlock() {
     let bHits = 0, bFA = 0, tTarg = 0, tNon = 0;
     let blockMisses = 0;
@@ -894,10 +918,8 @@ function endBlock() {
     sessionHits += bHits;
     sessionFalseAlarms += bFA;
     
-    let totalRelevant = tTarg + tNon;
-    let bAcc = totalRelevant === 0
-        ? 0
-        : Math.round(((bHits + (tNon - bFA)) / totalRelevant) * 100);
+    // NEW ACCURACY CALCULATION - Using Option 1
+    let bAcc = calculateAccuracy(bHits, blockMisses, bFA);
     
     totalSessionAccuracy.push(bAcc);
     
