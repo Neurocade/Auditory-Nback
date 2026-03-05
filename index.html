@@ -648,7 +648,7 @@ document.getElementById("optionsBtn").onclick = () => {
 document.getElementById("homeBtn").onclick = () => {
     hideAllScreens();
     document.getElementById("menu").style.display = "block";
-    displayProgress();
+    displayProgress(); // Make sure stats are refreshed
 };
 
 document.getElementById("sessionLengthSelect").onchange = (e) => {
@@ -912,9 +912,15 @@ function goToHomeFromSession() {
     window.speechSynthesis.cancel();
     if (trialTimeout) clearTimeout(trialTimeout);
     
+    // SAVE PROGRESS BEFORE RETURNING HOME
+    if (totalSessionAccuracy.length > 0) {
+        let avg = Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length);
+        saveProgress(n, avg);
+    }
+    
     hideAllScreens();
     document.getElementById("menu").style.display = "block";
-    displayProgress();
+    displayProgress(); // Refresh the stats display
 }
 
 function endSession() {
@@ -928,6 +934,7 @@ function endSession() {
     let div = document.getElementById("results");
     div.style.display = "block";
     
+    // Calculate and save progress
     let avg = totalSessionAccuracy.length > 0
         ? Math.round(totalSessionAccuracy.reduce((a,b)=>a+b,0) / totalSessionAccuracy.length)
         : 0;
@@ -957,9 +964,17 @@ function endSession() {
             <div class="stat-row">🎓 Final Level: <span class="stat-box">${n}-back</span></div>
         </div>
         <br><br>
-        <button onclick="location.reload()" style="background: #4caf50; color: black; font-weight: bold;">Return to Menu</button>
+        <button onclick="returnToMenu()" style="background: #4caf50; color: black; font-weight: bold;">Return to Menu</button>
     `;
 }
+
+// Add this new function to properly return to menu and refresh stats
+function returnToMenu() {
+    hideAllScreens();
+    document.getElementById("menu").style.display = "block";
+    displayProgress(); // Refresh stats when returning
+}
+   
 
 /* ========================================================
    SEQUENCE GENERATION
